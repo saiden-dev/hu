@@ -230,21 +230,130 @@ pub async fn update_kubeconfig(
 
 // ==================== Pod Operations ====================
 
-pub fn get_pods(namespace: &str, pattern: &str) -> Vec<String> {
-    let output = crate::utils::run_cmd(&["kubectl", "get", "pod", "-n", namespace, "--no-headers"]);
+#[derive(Debug, Clone)]
+pub struct PodInfo {
+    pub name: String,
+    pub pod_type: String,
+    pub age: String,
+}
+
+pub fn get_pods(namespace: &str, pattern: &str) -> Vec<PodInfo> {
+    let output = crate::utils::run_cmd(&[
+        "kubectl",
+        "get",
+        "pod",
+        "-n",
+        namespace,
+        "--no-headers",
+        "-o",
+        "custom-columns=NAME:.metadata.name,AGE:.metadata.creationTimestamp",
+    ]);
 
     output
         .map(|s| {
             s.lines()
                 .filter(|line| line.contains(pattern))
-                .filter_map(|line| line.split_whitespace().next())
-                .map(String::from)
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let name = parts[0].to_string();
+                        let pod_type = extract_pod_type(&name);
+                        let age = format_age(parts[1]);
+                        Some(PodInfo {
+                            name,
+                            pod_type,
+                            age,
+                        })
+                    } else {
+                        None
+                    }
+                })
                 .collect()
         })
         .unwrap_or_default()
 }
 
-pub fn display_pods(pods: &[String], env_name: &str, emoji: &str) {
+/// Extract pod type from name (e.g., "eks-cms-web-deployment-xxx" -> "web")
+fn extract_pod_type(name: &str) -> String {
+    // Common patterns: xxx-web-xxx, xxx-api-xxx, xxx-worker-xxx
+    let parts: Vec<&str> = name.split('-').collect();
+    for keyword in ["web", "api", "worker", "celery", "redis", "nginx", "db"] {
+        if parts.contains(&keyword) {
+            return keyword.to_string();
+        }
+    }
+    // Fallback: try to get a meaningful middle part
+    if parts.len() >= 3 {
+        return parts[parts.len() - 3].to_string();
+    }
+    "unknown".to_string()
+}
+
+/// Format ISO timestamp to human-readable age
+fn format_age(timestamp: &str) -> String {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    // Parse ISO 8601 timestamp (e.g., "2025-01-09T10:30:00Z")
+    let parsed = chrono_parse_timestamp(timestamp);
+    if parsed.is_none() {
+        return timestamp.to_string();
+    }
+
+    let created_secs = parsed.unwrap();
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_secs();
+
+    if now_secs < created_secs {
+        return "0s".to_string();
+    }
+
+    let diff = now_secs - created_secs;
+
+    if diff < 60 {
+        format!("{}s", diff)
+    } else if diff < 3600 {
+        format!("{}m", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h", diff / 3600)
+    } else {
+        format!("{}d", diff / 86400)
+    }
+}
+
+/// Simple ISO 8601 timestamp parser (returns Unix timestamp)
+fn chrono_parse_timestamp(s: &str) -> Option<u64> {
+    // Format: 2025-01-09T10:30:00Z
+    let s = s.trim();
+    if s.len() < 19 {
+        return None;
+    }
+
+    let year: u64 = s.get(0..4)?.parse().ok()?;
+    let month: u64 = s.get(5..7)?.parse().ok()?;
+    let day: u64 = s.get(8..10)?.parse().ok()?;
+    let hour: u64 = s.get(11..13)?.parse().ok()?;
+    let min: u64 = s.get(14..16)?.parse().ok()?;
+    let sec: u64 = s.get(17..19)?.parse().ok()?;
+
+    // Simplified calculation (not accounting for leap years perfectly)
+    let days_before_month: [u64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let leap_years = (year - 1) / 4 - (year - 1) / 100 + (year - 1) / 400;
+    let days = (year - 1970) * 365 + leap_years - 477 // 477 = leap years before 1970
+        + days_before_month[(month - 1) as usize]
+        + day
+        - 1
+        + if month > 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) {
+            1
+        } else {
+            0
+        };
+
+    Some(days * 86400 + hour * 3600 + min * 60 + sec)
+}
+
+pub fn display_pods(pods: &[PodInfo], env_name: &str, emoji: &str) {
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
@@ -252,14 +361,18 @@ pub fn display_pods(pods: &[String], env_name: &str, emoji: &str) {
         .set_header(vec![
             Cell::new("#").fg(Color::Cyan),
             Cell::new("Pod Name").fg(Color::Magenta),
+            Cell::new("Type").fg(Color::Yellow),
+            Cell::new("Age").fg(Color::Green),
             Cell::new("Short ID").fg(Color::DarkGrey),
         ]);
 
     for (i, pod) in pods.iter().enumerate() {
-        let short_id = &pod[pod.len().saturating_sub(5)..];
+        let short_id = &pod.name[pod.name.len().saturating_sub(5)..];
         table.add_row(vec![
             Cell::new(i + 1).fg(Color::Cyan),
-            Cell::new(pod).fg(Color::White),
+            Cell::new(&pod.name).fg(Color::White),
+            Cell::new(&pod.pod_type).fg(Color::Yellow),
+            Cell::new(&pod.age).fg(Color::Green),
             Cell::new(short_id).fg(Color::DarkGrey),
         ]);
     }
@@ -375,7 +488,7 @@ fn tail_pod_log(
     let _ = child.kill();
 }
 
-pub fn tail_logs(pods: &[String], namespace: &str, log_file: &str) -> Result<()> {
+pub fn tail_logs(pods: &[PodInfo], namespace: &str, log_file: &str) -> Result<()> {
     print_header(&format!("Tailing Logs: {}", log_file.bright_cyan()));
     println!(
         "  {} from {} pods",
@@ -397,14 +510,14 @@ pub fn tail_logs(pods: &[String], namespace: &str, log_file: &str) -> Result<()>
     let mut handles = vec![];
 
     for (i, pod) in pods.iter().enumerate() {
-        let pod = pod.clone();
+        let pod_name = pod.name.clone();
         let namespace = namespace.to_string();
         let log_file = log_file.to_string();
         let color = ANSI_COLORS[i % ANSI_COLORS.len()];
         let running = running.clone();
 
         let handle = thread::spawn(move || {
-            tail_pod_log(pod, namespace, log_file, color, running);
+            tail_pod_log(pod_name, namespace, log_file, color, running);
         });
         handles.push(handle);
     }
@@ -489,5 +602,5 @@ pub async fn run(
     }
 
     let pod = &pods[pod_num - 1];
-    exec_into_pod(pod, namespace, env_name, emoji, pod_type, pod_num)
+    exec_into_pod(&pod.name, namespace, env_name, emoji, pod_type, pod_num)
 }
