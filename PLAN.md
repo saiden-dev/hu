@@ -2,6 +2,11 @@
 
 A unified CLI for dev workflows: Kubernetes pods, Jira tickets, GitHub PRs/Actions, and AWS pipelines.
 
+## !!! READ-ONLY TOOL !!!
+
+**This tool is for STATUS REPORTING and LOG VIEWING only.**
+**NO write, execute, modify, create, or delete operations.**
+
 ## Current Features
 
 - [x] AWS SSO login integration
@@ -27,21 +32,17 @@ A unified CLI for dev workflows: Kubernetes pods, Jira tickets, GitHub PRs/Actio
 - Monitor GitHub Actions workflow runs
 - Display action logs and failure details
 - Link PRs to Jira tickets (extract from branch name)
-- Clear failed workflow runs
-- Clear all workflow runs
 
-### AWS CodePipeline Integration
+### AWS CodePipeline Integration (READ-ONLY)
 
 - List pipeline executions
 - Show pipeline stage status (Source → Build → Deploy)
 - Display execution history
-- Quick link to AWS Console
+- View execution logs
 
-### AWS Secrets Manager Integration
+### AWS Secrets Manager Integration (READ-ONLY)
 
-- List secrets by prefix/pattern
-- Display secret value (with confirmation)
-- Copy secret to clipboard
+- List secrets by prefix/pattern (names only)
 - Show secret metadata (last rotated, etc.)
 
 ## Architecture
@@ -89,16 +90,15 @@ hu gh pr                          # Show PR for current branch
 hu gh pr 456                      # Show specific PR
 hu gh runs                        # Show workflow runs
 hu gh runs --watch                # Live monitor
-hu gh clear                       # Clear failed workflow runs
-hu gh clear --all                 # Clear all workflow runs
 
-# AWS Pipelines
+# AWS Pipelines (read-only)
 hu pipeline                       # List recent executions
-hu pipeline cms-deploy            # Show specific pipeline
+hu pipeline cms                   # Show pipeline status
+hu pipeline cms --logs            # View execution logs
 
-# Secrets
-hu secret list prod/              # List secrets by prefix
-hu secret get prod/api-key        # Show secret value
+# Secrets (read-only)
+hu secret list                    # List secret names
+hu secret list cms-               # List secrets by prefix
 ```
 
 ## Dependencies to Add
@@ -229,16 +229,14 @@ let octocrab = octocrab::Octocrab::builder()
 
 ### hu Integration Plan
 
-For `hu gh` commands:
+For `hu gh` commands (READ-ONLY):
 - Store GitHub token in config or use `gh` CLI's auth
 - Use octocrab for PR listing, status checks, workflow runs
 - Implement:
   - `hu gh pr` - List/show PRs
-  - `hu gh runs` - List workflow runs
-  - `hu gh clear` - Clear failed runs (replaces `just gh-clear`)
-  - `hu gh clear --all` - Clear all runs (replaces `just gh-clear-all`)
+  - `hu gh runs` - List workflow runs and status
 
-### Workflow Run Management with Octocrab
+### Workflow Run Viewing with Octocrab
 
 ```rust
 // List workflow runs
@@ -248,13 +246,7 @@ let runs = octocrab::instance()
     .send()
     .await?;
 
-// Delete a workflow run
-octocrab::instance()
-    .actions()
-    .delete_workflow_run("owner", "repo", run_id)
-    .await?;
-
-// Filter failed runs
+// Filter failed runs for display
 let failed_runs = runs.workflow_runs
     .iter()
     .filter(|r| r.conclusion == Some("failure".to_string()));
