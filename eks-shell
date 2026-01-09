@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Default values
+ENV=""
+TYPE=""
+POD_NUM=""
+NAMESPACE="cms"
+
+usage() {
+    echo -e "${CYAN}${BOLD}🚀 EKS Shell - Connect to Kubernetes pods easily${NC}\n"
+    cat <<EOF
+Usage: $(basename "$0") --env <prod|dev|stg> --type <pattern> [--pod <number>]
+
+Options:
+    --env   Environment (prod, dev, stg)
+    --type  Pod name pattern to filter (e.g., web, api)
+    --pod   Pod number to connect to (from the numbered list)
+    -h      Show this help
+
+Examples:
+    $(basename "$0") --env prod --type web          # List matching pods
+    $(basename "$0") --env prod --type web --pod 1  # Connect to pod #1
+EOF
+    exit 1
+}
+
+info()    { echo -e "${BLUE}ℹ️  $1${NC}"; }
+success() { echo -e "${GREEN}✅ $1${NC}"; }
+warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
+error()   { echo -e "${RED}❌ $1${NC}"; exit 1; }
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --env)  ENV="$2"; shift 2 ;;
+        --type) TYPE="$2"; shift 2 ;;
+        --pod)  POD_NUM="$2"; shift 2 ;;
+        -h|--help) usage ;;
+        *) error "Unknown option: $1" ;;
+    esac
+done
+
+[[ -z "$ENV" ]] && { warn "--env is required"; usage; }
+[[ -z "$TYPE" ]] && { warn "--type is required"; usage; }
+
+# Map environment to EKS cluster name
+case $ENV in
+    prod) CLUSTER="prod-eks"; ENV_EMOJI="🔴" ;;
+    dev)  CLUSTER="dev-eks";  ENV_EMOJI="🟢" ;;
+    stg)  CLUSTER="stg-eks";  ENV_EMOJI="🟡" ;;
+    *)    error "Invalid environment '$ENV'" ;;
+esac
+
+REGION="us-east-1"
+
+# Check AWS SSO session
+info "Checking AWS SSO session..."
+if ! aws sts get-caller-identity &>/dev/null; then
+    warn "SSO session expired. Logging in..."
+    aws sso login
+fi
+success "AWS session active"
+
+# Update kubeconfig
+info "Updating kubeconfig for ${BOLD}$CLUSTER${NC}${BLUE}...${NC}"
+aws eks update-kubeconfig --name "$CLUSTER" --region "$REGION" >/dev/null
+success "Connected to ${BOLD}$CLUSTER${NC}"
+
+# Get matching pods
+info "Fetching pods matching '${BOLD}$TYPE${NC}${BLUE}' in namespace '${BOLD}$NAMESPACE${NC}${BLUE}'...${NC}"
+mapfile -t PODS < <(kubectl get pod -n "$NAMESPACE" --no-headers 2>/dev/null | grep "$TYPE" | awk '{print $1}')
+
+if [[ ${#PODS[@]} -eq 0 ]]; then
+    error "No pods found matching '$TYPE'"
+fi
+
+# List pods with numbers
+echo ""
+echo -e "${MAGENTA}${BOLD}📦 Matching pods:${NC}"
+for i in "${!PODS[@]}"; do
+    echo -e "   ${CYAN}${BOLD}$((i+1)).${NC} ${PODS[$i]}"
+done
+echo ""
+
+# If no pod number specified, just list and exit
+if [[ -z "$POD_NUM" ]]; then
+    echo -e "${YELLOW}👆 Use ${BOLD}--pod <number>${NC}${YELLOW} to connect${NC}"
+    exit 0
+fi
+
+# Validate pod number
+if ! [[ "$POD_NUM" =~ ^[0-9]+$ ]] || [[ "$POD_NUM" -lt 1 ]] || [[ "$POD_NUM" -gt ${#PODS[@]} ]]; then
+    error "Invalid pod number '$POD_NUM'. Choose 1-${#PODS[@]}"
+fi
+
+POD_NAME="${PODS[$((POD_NUM-1))]}"
+PROMPT_LABEL="${ENV}-${TYPE}-${POD_NUM}"
+
+echo -e "${GREEN}🔗 Connecting to: ${BOLD}$POD_NAME${NC}"
+echo -e "${CYAN}💻 Prompt: ${BOLD}${PROMPT_LABEL} \$ ${NC}"
+echo ""
+
+# Execute into the pod with custom PS1 (with color!)
+PS1_COLORED="${ENV_EMOJI} \[\033[1;36m\]${PROMPT_LABEL}\[\033[0m\] \$ "
+kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- bash -c "export PS1='${PS1_COLORED}'; exec bash"
