@@ -16,16 +16,18 @@ ENV=""
 TYPE="web"
 POD_NUM=""
 NAMESPACE="cms"
+LOG_FILE=""
 
 usage() {
     echo -e "${CYAN}${BOLD}🚀 EKS Shell - Connect to Kubernetes pods easily${NC}\n"
     cat <<EOF
-Usage: $(basename "$0") [--env <prod|dev|stg>] [--type <pattern>] [--pod <number>]
+Usage: $(basename "$0") [--env <prod|dev|stg>] [--type <pattern>] [--pod <number>] [--log [file]]
 
 Options:
     --env   Environment (prod, dev, stg) - auto-detects from current context if omitted
     --type  Pod name pattern to filter (default: web)
     --pod   Pod number to connect to (from the numbered list)
+    --log   Tail log file from all matching pods (default: /app/log/<environment>.log)
     -h      Show this help
 
 Defaults: namespace=cms, type=web, env=auto-detect
@@ -35,6 +37,8 @@ Examples:
     $(basename "$0") --pod 1                        # Connect to web pod #1
     $(basename "$0") --env prod --type api          # List api pods on prod
     $(basename "$0") --env prod --type web --pod 1  # Connect to specific pod
+    $(basename "$0") --log                          # Tail default log from all web pods
+    $(basename "$0") --log /app/log/sidekiq.log     # Tail custom log file
 EOF
     exit 1
 }
@@ -50,6 +54,14 @@ while [[ $# -gt 0 ]]; do
         --env)  ENV="$2"; shift 2 ;;
         --type) TYPE="$2"; shift 2 ;;
         --pod)  POD_NUM="$2"; shift 2 ;;
+        --log)
+            # Check if next arg is a file path or another flag/missing
+            if [[ $# -gt 1 && "$2" != --* ]]; then
+                LOG_FILE="$2"; shift 2
+            else
+                LOG_FILE="DEFAULT"; shift 1
+            fi
+            ;;
         -h|--help) usage ;;
         *) error "Unknown option: $1" ;;
     esac
@@ -71,13 +83,18 @@ if [[ -z "$ENV" ]]; then
     info "Detected environment: ${BOLD}$ENV${NC}${BLUE} (from current context)${NC}"
 fi
 
-# Map environment to EKS cluster name
+# Map environment to EKS cluster name and long name for log path
 case $ENV in
-    prod) CLUSTER="prod-eks"; ENV_EMOJI="🔴" ;;
-    dev)  CLUSTER="dev-eks";  ENV_EMOJI="🟢" ;;
-    stg)  CLUSTER="stg-eks";  ENV_EMOJI="🟡" ;;
+    prod) CLUSTER="prod-eks"; ENV_EMOJI="🔴"; ENV_LONG="production" ;;
+    dev)  CLUSTER="dev-eks";  ENV_EMOJI="🟢"; ENV_LONG="development" ;;
+    stg)  CLUSTER="stg-eks";  ENV_EMOJI="🟡"; ENV_LONG="staging" ;;
     *)    error "Invalid environment '$ENV'" ;;
 esac
+
+# Set default log file path if --log was used without a path
+if [[ "$LOG_FILE" == "DEFAULT" ]]; then
+    LOG_FILE="/app/log/${ENV_LONG}.log"
+fi
 
 REGION="us-east-1"
 
@@ -110,9 +127,44 @@ for i in "${!PODS[@]}"; do
 done
 echo ""
 
+# If --log specified, tail logs from all pods
+if [[ -n "$LOG_FILE" ]]; then
+    echo -e "${GREEN}📜 Tailing ${BOLD}$LOG_FILE${NC}${GREEN} from ${#PODS[@]} pods...${NC}"
+    echo -e "${YELLOW}Press Ctrl+C to stop${NC}\n"
+    
+    # Generate short labels for each pod (last 5 chars of pod name)
+    declare -A POD_LABELS
+    COLORS=("$RED" "$GREEN" "$YELLOW" "$BLUE" "$MAGENTA" "$CYAN")
+    for i in "${!PODS[@]}"; do
+        POD_LABELS["${PODS[$i]}"]="${COLORS[$((i % ${#COLORS[@]}))]}"
+    done
+    
+    # Start tail on each pod in background, prefix output with pod identifier
+    PIDS=()
+    for i in "${!PODS[@]}"; do
+        POD="${PODS[$i]}"
+        SHORT_ID="${POD: -5}"
+        COLOR="${POD_LABELS[$POD]}"
+        (
+            kubectl exec "$POD" -n "$NAMESPACE" -- tail -f "$LOG_FILE" 2>/dev/null | \
+            while IFS= read -r line; do
+                echo -e "${COLOR}[${SHORT_ID}]${NC} $line"
+            done
+        ) &
+        PIDS+=($!)
+    done
+    
+    # Cleanup on exit
+    trap 'kill "${PIDS[@]}" 2>/dev/null; exit 0' INT TERM
+    
+    # Wait for all background processes
+    wait
+    exit 0
+fi
+
 # If no pod number specified, just list and exit
 if [[ -z "$POD_NUM" ]]; then
-    echo -e "${YELLOW}👆 Use ${BOLD}--pod <number>${NC}${YELLOW} to connect${NC}"
+    echo -e "${YELLOW}👆 Use ${BOLD}--pod <number>${NC}${YELLOW} to connect, or ${BOLD}--log${NC}${YELLOW} to tail logs${NC}"
     exit 0
 fi
 
