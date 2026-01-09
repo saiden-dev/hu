@@ -42,7 +42,9 @@ ENV_CONFIG = {
 POD_COLORS = ["red", "green", "yellow", "blue", "magenta", "cyan"]
 
 
-def run_cmd(cmd: list[str], capture: bool = True, check: bool = True) -> subprocess.CompletedProcess:
+def run_cmd(
+    cmd: list[str], capture: bool = True, check: bool = True
+) -> subprocess.CompletedProcess:
     """Run a command and return the result."""
     return subprocess.run(cmd, capture_output=capture, text=True, check=check)
 
@@ -81,7 +83,9 @@ def update_kubeconfig(cluster: str, region: str = "us-east-1"):
 
 def get_pods(namespace: str, pattern: str) -> list[str]:
     """Get pods matching the pattern."""
-    result = run_cmd(["kubectl", "get", "pod", "-n", namespace, "--no-headers"], check=False)
+    result = run_cmd(
+        ["kubectl", "get", "pod", "-n", namespace, "--no-headers"], check=False
+    )
     if result.returncode != 0:
         return []
     pods = []
@@ -113,10 +117,12 @@ def display_pods(pods: list[str], env: str, env_emoji: str):
     console.print()
 
 
-def exec_into_pod(pod: str, namespace: str, env: str, pod_type: str, pod_num: int, env_emoji: str):
+def exec_into_pod(
+    pod: str, namespace: str, env: str, pod_type: str, pod_num: int, env_emoji: str
+):
     """Execute into a pod with a custom prompt."""
     prompt_label = f"{env}-{pod_type}-{pod_num}"
-    
+
     panel = Panel(
         f"[bold]{pod}[/bold]\n[dim]Prompt:[/dim] {env_emoji} [cyan]{prompt_label}[/cyan] $",
         title="🔗 [green]Connecting[/green]",
@@ -125,17 +131,26 @@ def exec_into_pod(pod: str, namespace: str, env: str, pod_type: str, pod_num: in
     console.print(panel)
     console.print()
 
-    subprocess.run([
-        "kubectl", "exec", "-it", pod, "-n", namespace, "--",
-        "env",
-        f"EKS_ENV={env}",
-        f"EKS_TYPE={pod_type}",
-        f"EKS_POD_NUM={pod_num}",
-        f"EKS_LABEL={prompt_label}",
-        f"EKS_EMOJI={env_emoji}",
-        "bash", "-c",
-        'export PS1="${EKS_EMOJI} \\[\\033[1;36m\\]${EKS_LABEL}\\[\\033[0m\\] $ "; exec bash --norc --noprofile'
-    ])
+    subprocess.run(
+        [
+            "kubectl",
+            "exec",
+            "-it",
+            pod,
+            "-n",
+            namespace,
+            "--",
+            "env",
+            f"EKS_ENV={env}",
+            f"EKS_TYPE={pod_type}",
+            f"EKS_POD_NUM={pod_num}",
+            f"EKS_LABEL={prompt_label}",
+            f"EKS_EMOJI={env_emoji}",
+            "bash",
+            "-c",
+            'export PS1="${EKS_EMOJI} \\[\\033[1;36m\\]${EKS_LABEL}\\[\\033[0m\\] $ "; exec bash --norc --noprofile',
+        ]
+    )
 
 
 def tail_pod_log(pod: str, namespace: str, log_file: str, color: str):
@@ -146,8 +161,10 @@ def tail_pod_log(pod: str, namespace: str, log_file: str, color: str):
             ["kubectl", "exec", pod, "-n", namespace, "--", "tail", "-f", log_file],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
         )
+        if proc.stdout is None:
+            return
         for line in proc.stdout:
             rprint(f"[{color}][{short_id}][/{color}] {line.rstrip()}")
     except Exception:
@@ -179,11 +196,27 @@ def tail_logs(pods: list[str], namespace: str, log_file: str):
 
 @app.command()
 def main(
-    env: Annotated[Optional[Environment], typer.Option("--env", "-e", help="Environment (auto-detects if omitted)")] = None,
-    pod_type: Annotated[str, typer.Option("--type", "-t", help="Pod name pattern to filter")] = "web",
-    pod_num: Annotated[Optional[int], typer.Option("--pod", "-p", help="Pod number to connect to")] = None,
-    namespace: Annotated[str, typer.Option("--namespace", "-n", help="Kubernetes namespace")] = "cms",
-    log_file: Annotated[Optional[str], typer.Option("--log", "-l", help="Tail log file from all pods (default: /app/log/<env>.log)")] = None,
+    env: Annotated[
+        Optional[Environment],
+        typer.Option("--env", "-e", help="Environment (auto-detects if omitted)"),
+    ] = None,
+    pod_type: Annotated[
+        str, typer.Option("--type", "-t", help="Pod name pattern to filter")
+    ] = "web",
+    pod_num: Annotated[
+        Optional[int], typer.Option("--pod", "-p", help="Pod number to connect to")
+    ] = None,
+    namespace: Annotated[
+        str, typer.Option("--namespace", "-n", help="Kubernetes namespace")
+    ] = "cms",
+    log_file: Annotated[
+        Optional[str],
+        typer.Option(
+            "--log",
+            "-l",
+            help="Tail log file from all pods (default: /app/log/<env>.log)",
+        ),
+    ] = None,
 ):
     """
     🚀 [bold]EKS Shell[/bold] - Connect to Kubernetes pods easily
@@ -199,10 +232,14 @@ def main(
     if not env:
         detected = detect_env()
         if not detected:
-            console.print("[yellow]⚠️  No --env specified and couldn't detect from current context[/yellow]")
+            console.print(
+                "[yellow]⚠️  No --env specified and couldn't detect from current context[/yellow]"
+            )
             raise typer.BadParameter("Please specify --env (prod, dev, or stg)")
         env = Environment(detected)
-        console.print(f"[blue]ℹ️  Detected environment:[/blue] [bold]{env.value}[/bold] [dim](from current context)[/dim]")
+        console.print(
+            f"[blue]ℹ️  Detected environment:[/blue] [bold]{env.value}[/bold] [dim](from current context)[/dim]"
+        )
 
     config = ENV_CONFIG[env.value]
     cluster = config["cluster"]
@@ -221,12 +258,16 @@ def main(
     console.print("[green]✅ AWS session active[/green]")
 
     # Update kubeconfig
-    console.print(f"[blue]ℹ️  Updating kubeconfig for[/blue] [bold]{cluster}[/bold][blue]...[/blue]")
+    console.print(
+        f"[blue]ℹ️  Updating kubeconfig for[/blue] [bold]{cluster}[/bold][blue]...[/blue]"
+    )
     update_kubeconfig(cluster)
     console.print(f"[green]✅ Connected to[/green] [bold]{cluster}[/bold]")
 
     # Get pods
-    console.print(f"[blue]ℹ️  Fetching pods matching[/blue] [bold]{pod_type}[/bold] [blue]in namespace[/blue] [bold]{namespace}[/bold][blue]...[/blue]")
+    console.print(
+        f"[blue]ℹ️  Fetching pods matching[/blue] [bold]{pod_type}[/bold] [blue]in namespace[/blue] [bold]{namespace}[/bold][blue]...[/blue]"
+    )
     pods = get_pods(namespace, pod_type)
 
     if not pods:
@@ -256,7 +297,9 @@ def main(
 
     # Validate pod number
     if pod_num < 1 or pod_num > len(pods):
-        console.print(f"[red]❌ Invalid pod number '{pod_num}'. Choose 1-{len(pods)}[/red]")
+        console.print(
+            f"[red]❌ Invalid pod number '{pod_num}'. Choose 1-{len(pods)}[/red]"
+        )
         raise typer.Exit(1)
 
     # Connect to pod
