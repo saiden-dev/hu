@@ -10,15 +10,20 @@ pub const DEFAULT_SETTINGS: &str = r#"# hu settings
 [aws]
 region = "us-east-1"
 
-# AWS profiles for different services
-# Each profile is used for specific operations:
-#   eks     - EKS/Kubernetes operations (pod listing, exec, log tailing)
-#   general - General AWS operations (whoami, login)
-#   ec2     - EC2 operations (future)
-[aws.profiles]
-eks = "eks"
-general = "aws"
-ec2 = "ec2"
+# AWS profiles with their capabilities
+# Each profile maps to an AWS CLI profile and lists what it can do
+# Capabilities: eks, s3, ec2, secrets, pipelines, general
+[aws.profiles.eks]
+name = "eks"
+capabilities = ["eks"]
+
+[aws.profiles.aws]
+name = "aws"
+capabilities = ["general", "s3", "secrets", "pipelines"]
+
+[aws.profiles.ec2]
+name = "ec2"
+capabilities = ["ec2"]
 
 # [kubernetes]
 # namespace = "cms"
@@ -75,42 +80,47 @@ impl Default for AwsSettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct AwsProfiles {
-    /// Profile for EKS/Kubernetes operations
-    pub eks: Option<String>,
-    /// Profile for general AWS operations (whoami, etc.)
-    pub general: Option<String>,
-    /// Profile for EC2 operations
-    pub ec2: Option<String>,
+    /// Named profiles with their capabilities
+    #[serde(flatten)]
+    pub profiles: HashMap<String, AwsProfileConfig>,
 }
 
-impl Default for AwsProfiles {
-    fn default() -> Self {
-        Self {
-            eks: Some("eks".to_string()),
-            general: Some("aws".to_string()),
-            ec2: Some("ec2".to_string()),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwsProfileConfig {
+    /// AWS CLI profile name
+    pub name: String,
+    /// List of capabilities (e.g., ["eks", "s3", "ec2"])
+    #[serde(default)]
+    pub capabilities: Vec<String>,
 }
 
 impl AwsProfiles {
+    /// Get profile name for a given capability
+    pub fn profile_for(&self, capability: &str) -> Option<&str> {
+        self.profiles
+            .values()
+            .find(|p| p.capabilities.iter().any(|c| c == capability))
+            .map(|p| p.name.as_str())
+    }
+
     /// Get profile for EKS operations
     pub fn eks_profile(&self) -> Option<&str> {
-        self.eks.as_deref()
+        self.profile_for("eks")
     }
 
     /// Get profile for general AWS operations
     pub fn general_profile(&self) -> Option<&str> {
-        self.general.as_deref()
+        self.profile_for("general")
+            .or_else(|| self.profile_for("s3"))
     }
 
-    /// Get profile for EC2 operations (future use)
+    /// Get profile for EC2 operations
     #[allow(dead_code)]
     pub fn ec2_profile(&self) -> Option<&str> {
-        self.ec2.as_deref()
+        self.profile_for("ec2")
     }
 }
 

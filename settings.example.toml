@@ -15,18 +15,29 @@
 # AWS region for EKS clusters
 # region = "us-east-1"
 
-# AWS profiles for different services
-# Each profile maps to an AWS CLI profile configured in ~/.aws/config
+# AWS profiles with their capabilities
+# Each profile maps to an AWS CLI profile and lists what it can do
 # The --aws-profile flag overrides these for any command
-[aws.profiles]
-# Profile for EKS/Kubernetes operations (pod listing, exec, log tailing, kubeconfig updates)
-# eks = "eks"
+#
+# Available capabilities:
+#   eks       - EKS/Kubernetes operations (pod listing, exec, log tailing)
+#   ec2       - EC2 instance operations
+#   s3        - S3 bucket access
+#   secrets   - Secrets Manager access
+#   pipelines - CodePipeline access
+#   general   - General AWS operations (whoami, login)
 
-# Profile for general AWS operations (whoami, login, etc.)
-# general = "aws"
+[aws.profiles.eks]
+name = "eks"
+capabilities = ["eks"]
 
-# Profile for EC2 operations (future)
-# ec2 = "ec2"
+[aws.profiles.aws]
+name = "aws"
+capabilities = ["general", "s3", "secrets", "pipelines"]
+
+[aws.profiles.ec2]
+name = "ec2"
+capabilities = ["ec2"]
 
 # ============================================================================
 # Kubernetes Configuration  
