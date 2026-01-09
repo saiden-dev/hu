@@ -21,8 +21,8 @@ impl Environment {
     fn cluster(&self) -> &'static str {
         match self {
             Environment::Prod => "prod-eks",
-            Environment::Dev => "dev-eks",
-            Environment::Stg => "stg-eks",
+            Environment::Dev => "eks-dev",
+            Environment::Stg => "eks-stg",
         }
     }
 
