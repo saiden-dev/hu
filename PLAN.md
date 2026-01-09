@@ -27,6 +27,8 @@ A unified CLI for dev workflows: Kubernetes pods, Jira tickets, GitHub PRs/Actio
 - Monitor GitHub Actions workflow runs
 - Display action logs and failure details
 - Link PRs to Jira tickets (extract from branch name)
+- Clear failed workflow runs
+- Clear all workflow runs
 
 ### AWS CodePipeline Integration
 
@@ -85,8 +87,10 @@ hu jira search "auth bug"         # Search tickets
 # GitHub
 hu gh pr                          # Show PR for current branch
 hu gh pr 456                      # Show specific PR
-hu gh actions                     # Show workflow runs
-hu gh actions --watch             # Live monitor
+hu gh runs                        # Show workflow runs
+hu gh runs --watch                # Live monitor
+hu gh clear                       # Clear failed workflow runs
+hu gh clear --all                 # Clear all workflow runs
 
 # AWS Pipelines
 hu pipeline                       # List recent executions
@@ -228,4 +232,30 @@ let octocrab = octocrab::Octocrab::builder()
 For `hu gh` commands:
 - Store GitHub token in config or use `gh` CLI's auth
 - Use octocrab for PR listing, status checks, workflow runs
-- Implement `hu gh pr`, `hu gh runs`, `hu gh clear-runs`
+- Implement:
+  - `hu gh pr` - List/show PRs
+  - `hu gh runs` - List workflow runs
+  - `hu gh clear` - Clear failed runs (replaces `just gh-clear`)
+  - `hu gh clear --all` - Clear all runs (replaces `just gh-clear-all`)
+
+### Workflow Run Management with Octocrab
+
+```rust
+// List workflow runs
+let runs = octocrab::instance()
+    .workflows("owner", "repo")
+    .list_all_runs()
+    .send()
+    .await?;
+
+// Delete a workflow run
+octocrab::instance()
+    .actions()
+    .delete_workflow_run("owner", "repo", run_id)
+    .await?;
+
+// Filter failed runs
+let failed_runs = runs.workflow_runs
+    .iter()
+    .filter(|r| r.conclusion == Some("failure".to_string()));
+```
