@@ -46,7 +46,7 @@ pub const DEFAULT_SETTINGS: &str = r#"# hu settings
 
 [logging]
 # Default log file path template ({env} is replaced with environment name)
-# log_path = "/app/log/{env}.log"
+# log_path = "~/.config/hu/{env}.log"
 
 # ============================================================================
 # Display Configuration
@@ -139,7 +139,7 @@ pub struct LoggingSettings {
 impl Default for LoggingSettings {
     fn default() -> Self {
         Self {
-            log_path: "/app/log/{env}.log".to_string(),
+            log_path: "~/.config/hu/{env}.log".to_string(),
         }
     }
 }

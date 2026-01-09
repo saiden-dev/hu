@@ -75,8 +75,13 @@ impl std::fmt::Display for Environment {
     hu --log                               \x1b[2m# Tail default log\x1b[0m
     hu -l /app/log/sidekiq.log             \x1b[2m# Tail custom log\x1b[0m
     hu --whoami                            \x1b[2m# Show AWS identity and permissions\x1b[0m
-    hu --aws-profile hu                    \x1b[2m# Use specific AWS profile\x1b[0m")]
+    hu --aws-profile hu                    \x1b[2m# Use specific AWS profile\x1b[0m
+    hu log                                 \x1b[2m# View local log file\x1b[0m
+    hu log -f                              \x1b[2m# Tail local log file\x1b[0m")]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Environment (auto-detects if omitted)
     #[arg(short, long, value_enum)]
     env: Option<Environment>,
@@ -104,6 +109,37 @@ struct Args {
     /// AWS profile to use
     #[arg(long = "aws-profile")]
     aws_profile: Option<String>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Commands {
+    /// View or tail local log files with pretty colors
+    #[command(alias = "logs")]
+    Log {
+        /// Environment to view logs for
+        #[arg(short, long, value_enum)]
+        env: Option<Environment>,
+
+        /// Path to log file (overrides env-based path)
+        #[arg(short, long)]
+        path: Option<String>,
+
+        /// Follow/tail the log file
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Number of lines to show (default: 50)
+        #[arg(short = 'n', long, default_value = "50")]
+        lines: usize,
+
+        /// Filter lines containing this pattern
+        #[arg(short = 'g', long)]
+        grep: Option<String>,
+
+        /// Show timestamps in a different color
+        #[arg(long, default_value = "true")]
+        colorize: bool,
+    },
 }
 
 const ANSI_COLORS: [&str; 6] = ["red", "green", "yellow", "blue", "magenta", "cyan"];
@@ -1037,6 +1073,170 @@ fn tail_pod_log(
     let _ = child.kill();
 }
 
+// ==================== Local Log Viewing ====================
+
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with("~/") {
+        if let Some(home) = std::env::var("HOME").ok() {
+            return path.replacen("~", &home, 1);
+        }
+    }
+    path.to_string()
+}
+
+fn colorize_log_line(line: &str) -> String {
+    // Colorize common log patterns
+    let line = if line.contains("ERROR") || line.contains("error") || line.contains("Error") {
+        line.red().to_string()
+    } else if line.contains("WARN") || line.contains("warn") || line.contains("Warning") {
+        line.yellow().to_string()
+    } else if line.contains("INFO") || line.contains("info") {
+        line.to_string()
+    } else if line.contains("DEBUG") || line.contains("debug") {
+        line.dimmed().to_string()
+    } else {
+        line.to_string()
+    };
+
+    // Try to colorize timestamp at the start (common formats)
+    // e.g., "2024-01-09 12:34:56" or "[2024-01-09T12:34:56]"
+    if let Some(idx) = line.find(|c: char| c.is_ascii_digit()) {
+        if idx < 5 {
+            // Timestamp likely at start
+            let timestamp_end = line
+                .char_indices()
+                .take(30)
+                .find(|(_, c)| *c == ']' || *c == ' ' && line[idx..].contains(':'))
+                .map(|(i, _)| i + 1)
+                .unwrap_or(0);
+
+            if timestamp_end > idx + 10 {
+                let (timestamp, rest) = line.split_at(timestamp_end);
+                return format!("{}{}", timestamp.bright_black(), rest);
+            }
+        }
+    }
+
+    line
+}
+
+fn view_local_log(
+    path: &str,
+    follow: bool,
+    lines: usize,
+    grep: Option<&str>,
+    colorize: bool,
+) -> Result<()> {
+    let path = expand_tilde(path);
+    let path = PathBuf::from(&path);
+
+    if !path.exists() {
+        bail!("Log file not found: {:?}", path);
+    }
+
+    print_header(&format!("Log: {}", path.display().to_string().bright_cyan()));
+
+    if follow {
+        println!("  {} to stop", "Press Ctrl+C".yellow());
+        println!();
+
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::Relaxed);
+            println!("\n{}", "Stopped.".yellow());
+            std::process::exit(0);
+        })
+        .context("Failed to set Ctrl+C handler")?;
+
+        // First show last N lines
+        let file = std::fs::File::open(&path)?;
+        let reader = BufReader::new(file);
+        let all_lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+        let start = all_lines.len().saturating_sub(lines);
+
+        for line in &all_lines[start..] {
+            if let Some(pattern) = grep {
+                if !line.contains(pattern) {
+                    continue;
+                }
+            }
+            if colorize {
+                println!("{}", colorize_log_line(line));
+            } else {
+                println!("{}", line);
+            }
+        }
+
+        // Now tail
+        let mut last_size = std::fs::metadata(&path)?.len();
+        let mut last_pos = last_size;
+
+        while running.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(100));
+
+            let current_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(last_size);
+
+            if current_size > last_pos {
+                let file = std::fs::File::open(&path)?;
+                let mut reader = BufReader::new(file);
+                std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(last_pos))?;
+
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        if let Some(pattern) = grep {
+                            if !line.contains(pattern) {
+                                continue;
+                            }
+                        }
+                        if colorize {
+                            println!("{}", colorize_log_line(&line));
+                        } else {
+                            println!("{}", line);
+                        }
+                    }
+                }
+
+                last_pos = current_size;
+            } else if current_size < last_size {
+                // File was truncated/rotated
+                last_pos = 0;
+            }
+            last_size = current_size;
+        }
+    } else {
+        // Just show last N lines
+        let file = std::fs::File::open(&path)?;
+        let reader = BufReader::new(file);
+        let all_lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
+        let start = all_lines.len().saturating_sub(lines);
+
+        for line in &all_lines[start..] {
+            if let Some(pattern) = grep {
+                if !line.contains(pattern) {
+                    continue;
+                }
+            }
+            if colorize {
+                println!("{}", colorize_log_line(line));
+            } else {
+                println!("{}", line);
+            }
+        }
+
+        println!();
+        println!(
+            "{} {} lines (use {} to follow)",
+            "Showing last".dimmed(),
+            (all_lines.len() - start).to_string().cyan(),
+            "-f".yellow()
+        );
+    }
+
+    Ok(())
+}
+
 fn tail_logs(pods: &[String], namespace: &str, log_file: &str) -> Result<()> {
     print_header(&format!("Tailing Logs: {}", log_file.bright_cyan()));
     println!(
@@ -1097,6 +1297,31 @@ async fn main() -> Result<()> {
 
     // Load settings from config file
     let settings = config::load_settings().context("Failed to load settings")?;
+
+    // Handle subcommands first (they don't need AWS)
+    if let Some(command) = &args.command {
+        match command {
+            Commands::Log {
+                env,
+                path,
+                follow,
+                lines,
+                grep,
+                colorize,
+            } => {
+                let log_path = if let Some(p) = path {
+                    p.clone()
+                } else {
+                    let env_name = env
+                        .map(|e| e.long_name())
+                        .or_else(|| detect_env().map(|e| e.long_name()))
+                        .unwrap_or("development");
+                    settings.logging.log_path.replace("{env}", env_name)
+                };
+                return view_local_log(&log_path, *follow, *lines, grep.as_deref(), *colorize);
+            }
+        }
+    }
 
     // CLI args override config file, config file overrides defaults
     let profile = args.aws_profile.as_deref().or(settings.aws.profile.as_deref());
