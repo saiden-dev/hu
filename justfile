@@ -84,3 +84,12 @@ dist: lint test release
 # Watch for changes and rebuild
 watch:
     cargo watch -x build
+
+# GitHub Actions
+# Clear failed workflow runs
+gh-clear:
+    gh run list --status failure --limit 1000 --json databaseId -q '.[].databaseId' | xargs -I{} gh run delete {}
+
+# Clear all workflow runs
+gh-clear-all:
+    gh run list --limit 1000 --json databaseId -q '.[].databaseId' | xargs -I{} gh run delete {}
