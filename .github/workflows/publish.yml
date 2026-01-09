@@ -1,8 +1,8 @@
 name: Publish
 
+# Temporarily disabled
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
