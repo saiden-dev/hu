@@ -191,6 +191,17 @@ enum AwsCommands {
 
     /// Login to AWS SSO
     Login,
+
+    /// Discover all AWS profiles and their capabilities (read-only)
+    Discover {
+        /// Include expired/invalid profiles in output
+        #[arg(long)]
+        all: bool,
+
+        /// Output as JSON for scripting
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -302,15 +313,25 @@ async fn main() -> Result<()> {
         }
 
         Commands::Aws { action } => {
-            // Use general profile for AWS operations
-            let profile = resolve_profile(cli_profile, settings.aws.profiles.general_profile());
-            let aws_config = ensure_aws_session(profile, &settings.aws.region).await?;
             match action {
-                AwsCommands::Whoami => aws::whoami(&aws_config).await,
-                AwsCommands::Login => {
-                    aws::sso_login(profile)?;
-                    print_success("Logged in successfully");
-                    Ok(())
+                AwsCommands::Discover { all, json } => {
+                    // Discovery checks all profiles individually, no pre-login needed
+                    aws::discover(&settings.aws.region, all, json).await
+                }
+                _ => {
+                    // Other AWS commands use general profile
+                    let profile =
+                        resolve_profile(cli_profile, settings.aws.profiles.general_profile());
+                    let aws_config = ensure_aws_session(profile, &settings.aws.region).await?;
+                    match action {
+                        AwsCommands::Whoami => aws::whoami(&aws_config).await,
+                        AwsCommands::Login => {
+                            aws::sso_login(profile)?;
+                            print_success("Logged in successfully");
+                            Ok(())
+                        }
+                        AwsCommands::Discover { .. } => unreachable!(),
+                    }
                 }
             }
         }
@@ -480,11 +501,13 @@ async fn main() -> Result<()> {
                 JiraCommands::Search { query, max } => {
                     let config = jira::load_jira_config()?;
                     // If query doesn't look like JQL, wrap it in a text search
-                    let jql = if query.contains('=') || query.contains(" AND ") || query.contains(" OR ") {
-                        query
-                    } else {
-                        format!("text ~ \"{}\"", query)
-                    };
+                    let jql =
+                        if query.contains('=') || query.contains(" AND ") || query.contains(" OR ")
+                        {
+                            query
+                        } else {
+                            format!("text ~ \"{}\"", query)
+                        };
                     let result = jira::search_issues(&config, &jql, max).await?;
                     jira::display_search_results(&result);
                     Ok(())

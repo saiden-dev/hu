@@ -2,8 +2,8 @@ use anyhow::{bail, Context, Result};
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
-    RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
+    Scope, TokenResponse, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
@@ -194,10 +194,7 @@ fn wait_for_callback(listener: &TcpListener, expected_state: &CsrfToken) -> Resu
 }
 
 async fn fetch_cloud_id(config: &mut JiraConfig) -> Result<()> {
-    let token = config
-        .access_token
-        .as_ref()
-        .context("No access token")?;
+    let token = config.access_token.as_ref().context("No access token")?;
 
     let client = reqwest::Client::new();
     let response: Vec<AccessibleResource> = client
@@ -222,30 +219,6 @@ async fn fetch_cloud_id(config: &mut JiraConfig) -> Result<()> {
 struct AccessibleResource {
     id: String,
     url: String,
-    #[allow(dead_code)]
-    name: String,
-}
-
-pub async fn refresh_token(config: &mut JiraConfig) -> Result<()> {
-    let client = create_oauth_client(config)?;
-    let refresh = config
-        .refresh_token
-        .as_ref()
-        .context("No refresh token available. Run: hu jira login")?;
-
-    let token_result = client
-        .exchange_refresh_token(&RefreshToken::new(refresh.clone()))
-        .request_async(async_http_client)
-        .await
-        .context("Failed to refresh token")?;
-
-    config.access_token = Some(token_result.access_token().secret().clone());
-    if let Some(new_refresh) = token_result.refresh_token() {
-        config.refresh_token = Some(new_refresh.secret().clone());
-    }
-
-    save_jira_config(config)?;
-    Ok(())
 }
 
 // ==================== Jira API ====================
@@ -264,9 +237,6 @@ pub struct IssueFields {
     pub reporter: Option<User>,
     pub priority: Option<Priority>,
     pub issuetype: Option<IssueType>,
-    pub created: Option<String>,
-    pub updated: Option<String>,
-    pub description: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -322,7 +292,11 @@ pub async fn get_issue(config: &JiraConfig, key: &str) -> Result<JiraIssue> {
     Ok(issue)
 }
 
-pub async fn search_issues(config: &JiraConfig, jql: &str, max_results: u32) -> Result<SearchResult> {
+pub async fn search_issues(
+    config: &JiraConfig,
+    jql: &str,
+    max_results: u32,
+) -> Result<SearchResult> {
     let token = config.access_token.as_ref().context("Not logged in")?;
     let cloud_id = config.cloud_id.as_ref().context("No cloud ID")?;
 
@@ -393,11 +367,19 @@ pub fn display_issue(issue: &JiraIssue) {
     }
 
     if let Some(assignee) = &issue.fields.assignee {
-        println!("  {} {}", "Assignee:".dimmed(), assignee.display_name.white());
+        println!(
+            "  {} {}",
+            "Assignee:".dimmed(),
+            assignee.display_name.white()
+        );
     }
 
     if let Some(reporter) = &issue.fields.reporter {
-        println!("  {} {}", "Reporter:".dimmed(), reporter.display_name.white());
+        println!(
+            "  {} {}",
+            "Reporter:".dimmed(),
+            reporter.display_name.white()
+        );
     }
 
     println!();
@@ -461,8 +443,12 @@ pub fn display_search_results(result: &SearchResult) {
     println!();
     println!(
         "{}",
-        format!("Found {} issues (showing {})", result.total, result.issues.len())
-            .dimmed()
+        format!(
+            "Found {} issues (showing {})",
+            result.total,
+            result.issues.len()
+        )
+        .dimmed()
     );
     println!("{table}");
     println!();
