@@ -13,24 +13,28 @@ NC='\033[0m' # No Color
 
 # Default values
 ENV=""
-TYPE=""
+TYPE="web"
 POD_NUM=""
 NAMESPACE="cms"
 
 usage() {
     echo -e "${CYAN}${BOLD}🚀 EKS Shell - Connect to Kubernetes pods easily${NC}\n"
     cat <<EOF
-Usage: $(basename "$0") --env <prod|dev|stg> --type <pattern> [--pod <number>]
+Usage: $(basename "$0") [--env <prod|dev|stg>] [--type <pattern>] [--pod <number>]
 
 Options:
-    --env   Environment (prod, dev, stg)
-    --type  Pod name pattern to filter (e.g., web, api)
+    --env   Environment (prod, dev, stg) - auto-detects from current context if omitted
+    --type  Pod name pattern to filter (default: web)
     --pod   Pod number to connect to (from the numbered list)
     -h      Show this help
 
+Defaults: namespace=cms, type=web, env=auto-detect
+
 Examples:
-    $(basename "$0") --env prod --type web          # List matching pods
-    $(basename "$0") --env prod --type web --pod 1  # Connect to pod #1
+    $(basename "$0")                                # List web pods on current env
+    $(basename "$0") --pod 1                        # Connect to web pod #1
+    $(basename "$0") --env prod --type api          # List api pods on prod
+    $(basename "$0") --env prod --type web --pod 1  # Connect to specific pod
 EOF
     exit 1
 }
@@ -51,8 +55,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$ENV" ]] && { warn "--env is required"; usage; }
-[[ -z "$TYPE" ]] && { warn "--type is required"; usage; }
+# If no env specified, detect from current kubeconfig
+if [[ -z "$ENV" ]]; then
+    CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || echo "")
+    if [[ "$CURRENT_CONTEXT" == *"prod"* ]]; then
+        ENV="prod"
+    elif [[ "$CURRENT_CONTEXT" == *"dev"* ]]; then
+        ENV="dev"
+    elif [[ "$CURRENT_CONTEXT" == *"stg"* ]]; then
+        ENV="stg"
+    else
+        warn "No --env specified and couldn't detect from current context"
+        usage
+    fi
+    info "Detected environment: ${BOLD}$ENV${NC}${BLUE} (from current context)${NC}"
+fi
 
 # Map environment to EKS cluster name
 case $ENV in
@@ -111,6 +128,12 @@ echo -e "${GREEN}🔗 Connecting to: ${BOLD}$POD_NAME${NC}"
 echo -e "${CYAN}💻 Prompt: ${BOLD}${PROMPT_LABEL} \$ ${NC}"
 echo ""
 
-# Execute into the pod with custom PS1 (with color!)
-PS1_COLORED="${ENV_EMOJI} \[\033[1;36m\]${PROMPT_LABEL}\[\033[0m\] \$ "
-kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- bash -c "export PS1='${PS1_COLORED}'; exec bash"
+# Execute into the pod with custom prompt via env vars
+# EKS_LABEL can be used by container's .bashrc to set PS1
+kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- env \
+    EKS_ENV="$ENV" \
+    EKS_TYPE="$TYPE" \
+    EKS_POD_NUM="$POD_NUM" \
+    EKS_LABEL="$PROMPT_LABEL" \
+    EKS_EMOJI="$ENV_EMOJI" \
+    bash -c 'export PS1="${EKS_EMOJI} \[\033[1;36m\]${EKS_LABEL}\[\033[0m\] \$ "; exec bash --norc --noprofile'
