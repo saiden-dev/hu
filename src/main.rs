@@ -1,9 +1,13 @@
 use anyhow::{bail, Context, Result};
+use aws_sdk_eks::types::Cluster;
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, Table};
 use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -91,23 +95,6 @@ struct Args {
 
 const ANSI_COLORS: [&str; 6] = ["red", "green", "yellow", "blue", "magenta", "cyan"];
 
-fn run_cmd(cmd: &[&str]) -> Result<String> {
-    let output = Command::new(cmd[0])
-        .args(&cmd[1..])
-        .output()
-        .with_context(|| format!("Failed to execute: {}", cmd.join(" ")))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        bail!(
-            "Command failed: {}\n{}",
-            cmd.join(" "),
-            String::from_utf8_lossy(&output.stderr)
-        )
-    }
-}
-
 fn run_cmd_no_check(cmd: &[&str]) -> Option<String> {
     Command::new(cmd[0])
         .args(&cmd[1..])
@@ -130,8 +117,18 @@ fn detect_env() -> Option<Environment> {
     }
 }
 
-fn check_aws_session() -> bool {
-    run_cmd_no_check(&["aws", "sts", "get-caller-identity"]).is_some()
+const AWS_REGION: &str = "us-east-1";
+
+async fn get_aws_config() -> aws_config::SdkConfig {
+    aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(AWS_REGION))
+        .load()
+        .await
+}
+
+async fn check_aws_session(config: &aws_config::SdkConfig) -> bool {
+    let client = aws_sdk_sts::Client::new(config);
+    client.get_caller_identity().send().await.is_ok()
 }
 
 fn aws_sso_login() -> Result<()> {
@@ -147,16 +144,209 @@ fn aws_sso_login() -> Result<()> {
     }
 }
 
-fn update_kubeconfig(cluster: &str, region: &str) -> Result<()> {
-    run_cmd(&[
-        "aws",
-        "eks",
-        "update-kubeconfig",
-        "--name",
-        cluster,
-        "--region",
-        region,
-    ])?;
+async fn get_cluster_info(config: &aws_config::SdkConfig, cluster: &str) -> Result<Cluster> {
+    let client = aws_sdk_eks::Client::new(config);
+    let response = client
+        .describe_cluster()
+        .name(cluster)
+        .send()
+        .await
+        .context("Failed to describe EKS cluster")?;
+
+    response
+        .cluster()
+        .cloned()
+        .context("No cluster info returned")
+}
+
+// Kubeconfig structures for serde serialization
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct Kubeconfig {
+    #[serde(rename = "apiVersion")]
+    api_version: String,
+    kind: String,
+    clusters: Vec<KubeconfigCluster>,
+    contexts: Vec<KubeconfigContext>,
+    #[serde(rename = "current-context")]
+    current_context: String,
+    users: Vec<KubeconfigUser>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preferences: Option<HashMap<String, serde_yaml::Value>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct KubeconfigCluster {
+    name: String,
+    cluster: ClusterData,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ClusterData {
+    #[serde(rename = "certificate-authority-data")]
+    certificate_authority_data: String,
+    server: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct KubeconfigContext {
+    name: String,
+    context: ContextData,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ContextData {
+    cluster: String,
+    user: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct KubeconfigUser {
+    name: String,
+    user: UserData,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct UserData {
+    exec: ExecConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ExecConfig {
+    #[serde(rename = "apiVersion")]
+    api_version: String,
+    command: String,
+    args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    env: Option<Vec<HashMap<String, String>>>,
+    #[serde(
+        rename = "interactiveMode",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    interactive_mode: Option<String>,
+    #[serde(
+        rename = "provideClusterInfo",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    provide_cluster_info: Option<bool>,
+}
+
+fn get_kubeconfig_path() -> Result<PathBuf> {
+    let home = std::env::var("HOME").context("HOME environment variable not set")?;
+    Ok(PathBuf::from(home).join(".kube").join("config"))
+}
+
+fn load_kubeconfig() -> Result<Kubeconfig> {
+    let path = get_kubeconfig_path()?;
+    if path.exists() {
+        let content = std::fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read kubeconfig at {:?}", path))?;
+        serde_yaml::from_str(&content).context("Failed to parse kubeconfig YAML")
+    } else {
+        Ok(Kubeconfig {
+            api_version: "v1".to_string(),
+            kind: "Config".to_string(),
+            clusters: vec![],
+            contexts: vec![],
+            current_context: String::new(),
+            users: vec![],
+            preferences: None,
+        })
+    }
+}
+
+fn save_kubeconfig(config: &Kubeconfig) -> Result<()> {
+    let path = get_kubeconfig_path()?;
+
+    // Ensure .kube directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory {:?}", parent))?;
+    }
+
+    let content = serde_yaml::to_string(config).context("Failed to serialize kubeconfig")?;
+    std::fs::write(&path, content)
+        .with_context(|| format!("Failed to write kubeconfig to {:?}", path))?;
+    Ok(())
+}
+
+async fn update_kubeconfig(config: &aws_config::SdkConfig, cluster_name: &str) -> Result<()> {
+    let cluster = get_cluster_info(config, cluster_name).await?;
+
+    let endpoint = cluster.endpoint().context("Cluster has no endpoint")?;
+    let ca_data = cluster
+        .certificate_authority()
+        .and_then(|ca| ca.data())
+        .context("Cluster has no CA data")?;
+    let arn = cluster.arn().context("Cluster has no ARN")?;
+
+    let mut kubeconfig = load_kubeconfig()?;
+
+    // Update or add cluster
+    let cluster_entry = KubeconfigCluster {
+        name: arn.to_string(),
+        cluster: ClusterData {
+            certificate_authority_data: ca_data.to_string(),
+            server: endpoint.to_string(),
+        },
+    };
+
+    if let Some(existing) = kubeconfig.clusters.iter_mut().find(|c| c.name == arn) {
+        *existing = cluster_entry;
+    } else {
+        kubeconfig.clusters.push(cluster_entry);
+    }
+
+    // Update or add user with exec-based auth
+    let user_entry = KubeconfigUser {
+        name: arn.to_string(),
+        user: UserData {
+            exec: ExecConfig {
+                api_version: "client.authentication.k8s.io/v1beta1".to_string(),
+                command: "aws".to_string(),
+                args: vec![
+                    "--region".to_string(),
+                    AWS_REGION.to_string(),
+                    "eks".to_string(),
+                    "get-token".to_string(),
+                    "--cluster-name".to_string(),
+                    cluster_name.to_string(),
+                    "--output".to_string(),
+                    "json".to_string(),
+                ],
+                env: None,
+                interactive_mode: Some("Never".to_string()),
+                provide_cluster_info: None,
+            },
+        },
+    };
+
+    if let Some(existing) = kubeconfig.users.iter_mut().find(|u| u.name == arn) {
+        *existing = user_entry;
+    } else {
+        kubeconfig.users.push(user_entry);
+    }
+
+    // Update or add context
+    let context_entry = KubeconfigContext {
+        name: arn.to_string(),
+        context: ContextData {
+            cluster: arn.to_string(),
+            user: arn.to_string(),
+        },
+    };
+
+    if let Some(existing) = kubeconfig.contexts.iter_mut().find(|c| c.name == arn) {
+        *existing = context_entry;
+    } else {
+        kubeconfig.contexts.push(context_entry);
+    }
+
+    // Set current context
+    kubeconfig.current_context = arn.to_string();
+
+    save_kubeconfig(&kubeconfig)?;
     Ok(())
 }
 
@@ -384,7 +574,8 @@ fn show_spinner(message: &str) -> ProgressBar {
     spinner
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Detect environment if not specified
@@ -414,9 +605,12 @@ fn main() -> Result<()> {
         None => None,
     };
 
+    // Load AWS config
+    let aws_config = get_aws_config().await;
+
     // Check AWS session
     let spinner = show_spinner("Checking AWS SSO session...");
-    if !check_aws_session() {
+    if !check_aws_session(&aws_config).await {
         spinner.finish_and_clear();
         print_warning("SSO session expired. Logging in...");
         aws_sso_login()?;
@@ -427,7 +621,7 @@ fn main() -> Result<()> {
 
     // Update kubeconfig
     let spinner = show_spinner(&format!("Updating kubeconfig for {}...", cluster));
-    update_kubeconfig(cluster, "us-east-1")?;
+    update_kubeconfig(&aws_config, cluster).await?;
     spinner.finish_and_clear();
     print_success(&format!("Connected to {}", cluster.bold()));
 
