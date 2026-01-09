@@ -1,0 +1,35 @@
+[package]
+name = "eks-shell"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chi"]
+description = "CLI tool for connecting to Kubernetes pods on AWS EKS clusters"
+license = "MIT"
+repository = "https://github.com/chi/eks-shell"
+keywords = ["kubernetes", "eks", "aws", "cli", "devops"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+# CLI framework
+clap = { version = "4", features = ["derive", "color", "suggestions", "wrap_help"] }
+
+# Pretty terminal output
+colored = "2"
+console = "0.15"
+indicatif = "0.17"
+comfy-table = "7"
+
+# Async runtime for parallel log tailing
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Signal handling
+ctrlc = "3"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
