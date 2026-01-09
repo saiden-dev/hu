@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux-x86_64:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - run: cargo build --release --target x86_64-unknown-linux-gnu
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gzip -c target/x86_64-unknown-linux-gnu/release/hu > hu-${VERSION}-linux-x86_64.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: hu-*-linux-x86_64.gz
+
+  build-linux-arm64:
+    name: Build Linux arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - run: cargo build --release --target aarch64-unknown-linux-gnu
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gzip -c target/aarch64-unknown-linux-gnu/release/hu > hu-${VERSION}-linux-arm64.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: hu-*-linux-arm64.gz
+
+  build-mac-x86_64:
+    name: Build macOS x86_64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gzip -c target/x86_64-apple-darwin/release/hu > hu-${VERSION}-mac-x86_64.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-x86_64
+          path: hu-*-mac-x86_64.gz
+
+  build-mac-arm64:
+    name: Build macOS arm64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - run: cargo build --release --target aarch64-apple-darwin
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gzip -c target/aarch64-apple-darwin/release/hu > hu-${VERSION}-mac-arm64.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64
+          path: hu-*-mac-arm64.gz
+
+  build-windows-x86_64:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Package
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          7z a hu-${VERSION}-windows-x86_64.zip ./target/x86_64-pc-windows-msvc/release/hu.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: hu-*-windows-x86_64.zip
+
+  build-windows-arm64:
+    name: Build Windows arm64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - run: cargo build --release --target aarch64-pc-windows-msvc
+      - name: Package
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          7z a hu-${VERSION}-windows-arm64.zip ./target/aarch64-pc-windows-msvc/release/hu.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64
+          path: hu-*-windows-arm64.zip
+
+  release:
+    name: Create Release
+    needs: [build-linux-x86_64, build-linux-arm64, build-mac-x86_64, build-mac-arm64, build-windows-x86_64, build-windows-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Determine if prerelease
+        id: prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *"pre"* ]] || [[ "${{ github.ref_name }}" == *"alpha"* ]] || [[ "${{ github.ref_name }}" == *"beta"* ]] || [[ "${{ github.ref_name }}" == *"rc"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/*.gz
+            artifacts/*.zip
+          generate_release_notes: true
+          draft: true
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
