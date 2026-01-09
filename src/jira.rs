@@ -1,0 +1,500 @@
+use anyhow::{bail, Context, Result};
+use oauth2::basic::BasicClient;
+use oauth2::reqwest::async_http_client;
+use oauth2::{
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
+    RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+};
+use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
+use std::path::PathBuf;
+
+use crate::utils::{print_error, print_header, print_success, spinner};
+
+const AUTH_URL: &str = "https://auth.atlassian.com/authorize";
+const TOKEN_URL: &str = "https://auth.atlassian.com/oauth/token";
+const CALLBACK_PORT: u16 = 8765;
+
+// ==================== Config ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct JiraConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub cloud_id: Option<String>,
+    pub site_url: Option<String>,
+}
+
+fn get_jira_token_path() -> Result<PathBuf> {
+    let config_dir = dirs::config_dir().context("Could not determine config directory")?;
+    Ok(config_dir.join("hu").join("jira_token.json"))
+}
+
+pub fn load_jira_config() -> Result<JiraConfig> {
+    let path = get_jira_token_path()?;
+    if path.exists() {
+        let content = std::fs::read_to_string(&path)?;
+        Ok(serde_json::from_str(&content)?)
+    } else {
+        Ok(JiraConfig::default())
+    }
+}
+
+pub fn save_jira_config(config: &JiraConfig) -> Result<()> {
+    let path = get_jira_token_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(config)?;
+    std::fs::write(&path, content)?;
+    Ok(())
+}
+
+// ==================== OAuth 2.0 Flow ====================
+
+fn create_oauth_client(config: &JiraConfig) -> Result<BasicClient> {
+    let client_id = config
+        .client_id
+        .as_ref()
+        .context("Jira client_id not configured. Run: hu jira setup")?;
+    let client_secret = config
+        .client_secret
+        .as_ref()
+        .context("Jira client_secret not configured. Run: hu jira setup")?;
+
+    let client = BasicClient::new(
+        ClientId::new(client_id.clone()),
+        Some(ClientSecret::new(client_secret.clone())),
+        AuthUrl::new(AUTH_URL.to_string())?,
+        Some(TokenUrl::new(TOKEN_URL.to_string())?),
+    )
+    .set_redirect_uri(RedirectUrl::new(format!(
+        "http://localhost:{}/callback",
+        CALLBACK_PORT
+    ))?);
+
+    Ok(client)
+}
+
+pub async fn login(config: &mut JiraConfig) -> Result<()> {
+    let client = create_oauth_client(config)?;
+
+    // Generate PKCE challenge
+    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+
+    // Build authorization URL
+    let (auth_url, csrf_token) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("read:jira-work".to_string()))
+        .add_scope(Scope::new("read:jira-user".to_string()))
+        .add_scope(Scope::new("offline_access".to_string()))
+        .add_extra_param("audience", "api.atlassian.com")
+        .add_extra_param("prompt", "consent")
+        .set_pkce_challenge(pkce_challenge)
+        .url();
+
+    print_header("Jira OAuth Login");
+    println!("Opening browser for authentication...");
+    println!();
+
+    // Open browser
+    if open::that(auth_url.as_str()).is_err() {
+        println!("Could not open browser. Please visit this URL manually:");
+        println!("{}", auth_url);
+    }
+
+    // Start local server to receive callback
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", CALLBACK_PORT))
+        .context("Failed to bind to callback port")?;
+
+    println!("Waiting for authorization...");
+    println!("(Listening on http://localhost:{})", CALLBACK_PORT);
+
+    let code = wait_for_callback(&listener, &csrf_token)?;
+
+    let spin = spinner("Exchanging code for token...");
+
+    // Exchange code for token
+    let token_result = client
+        .exchange_code(AuthorizationCode::new(code))
+        .set_pkce_verifier(pkce_verifier)
+        .request_async(async_http_client)
+        .await
+        .context("Failed to exchange code for token")?;
+
+    spin.finish_and_clear();
+
+    config.access_token = Some(token_result.access_token().secret().clone());
+    if let Some(refresh) = token_result.refresh_token() {
+        config.refresh_token = Some(refresh.secret().clone());
+    }
+
+    // Get accessible resources (cloud ID)
+    let spin = spinner("Fetching Jira site info...");
+    fetch_cloud_id(config).await?;
+    spin.finish_and_clear();
+
+    save_jira_config(config)?;
+    print_success("Logged in to Jira successfully!");
+
+    if let Some(site) = &config.site_url {
+        println!("  Site: {}", site);
+    }
+
+    Ok(())
+}
+
+fn wait_for_callback(listener: &TcpListener, expected_state: &CsrfToken) -> Result<String> {
+    let mut stream = listener
+        .incoming()
+        .flatten()
+        .next()
+        .context("No callback received")?;
+
+    let mut reader = BufReader::new(&stream);
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line)?;
+
+    // Parse the request
+    let redirect_url = request_line
+        .split_whitespace()
+        .nth(1)
+        .context("Invalid request")?;
+
+    // Extract code and state from query params
+    let url = url::Url::parse(&format!("http://localhost{}", redirect_url))?;
+    let mut code = None;
+    let mut state = None;
+
+    for (key, value) in url.query_pairs() {
+        match key.as_ref() {
+            "code" => code = Some(value.to_string()),
+            "state" => state = Some(value.to_string()),
+            _ => {}
+        }
+    }
+
+    // Validate state
+    let state = state.context("Missing state parameter")?;
+    if state != *expected_state.secret() {
+        bail!("CSRF state mismatch");
+    }
+
+    let code = code.context("Missing authorization code")?;
+
+    // Send response
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+        <html><body><h1>Success!</h1><p>You can close this window.</p></body></html>";
+    stream.write_all(response.as_bytes())?;
+
+    Ok(code)
+}
+
+async fn fetch_cloud_id(config: &mut JiraConfig) -> Result<()> {
+    let token = config
+        .access_token
+        .as_ref()
+        .context("No access token")?;
+
+    let client = reqwest::Client::new();
+    let response: Vec<AccessibleResource> = client
+        .get("https://api.atlassian.com/oauth/token/accessible-resources")
+        .bearer_auth(token)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    if let Some(resource) = response.first() {
+        config.cloud_id = Some(resource.id.clone());
+        config.site_url = Some(resource.url.clone());
+    } else {
+        bail!("No accessible Jira sites found");
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct AccessibleResource {
+    id: String,
+    url: String,
+    #[allow(dead_code)]
+    name: String,
+}
+
+pub async fn refresh_token(config: &mut JiraConfig) -> Result<()> {
+    let client = create_oauth_client(config)?;
+    let refresh = config
+        .refresh_token
+        .as_ref()
+        .context("No refresh token available. Run: hu jira login")?;
+
+    let token_result = client
+        .exchange_refresh_token(&RefreshToken::new(refresh.clone()))
+        .request_async(async_http_client)
+        .await
+        .context("Failed to refresh token")?;
+
+    config.access_token = Some(token_result.access_token().secret().clone());
+    if let Some(new_refresh) = token_result.refresh_token() {
+        config.refresh_token = Some(new_refresh.secret().clone());
+    }
+
+    save_jira_config(config)?;
+    Ok(())
+}
+
+// ==================== Jira API ====================
+
+#[derive(Debug, Deserialize)]
+pub struct JiraIssue {
+    pub key: String,
+    pub fields: IssueFields,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IssueFields {
+    pub summary: String,
+    pub status: Option<Status>,
+    pub assignee: Option<User>,
+    pub reporter: Option<User>,
+    pub priority: Option<Priority>,
+    pub issuetype: Option<IssueType>,
+    pub created: Option<String>,
+    pub updated: Option<String>,
+    pub description: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Status {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Priority {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IssueType {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchResult {
+    pub issues: Vec<JiraIssue>,
+    pub total: u32,
+}
+
+pub async fn get_issue(config: &JiraConfig, key: &str) -> Result<JiraIssue> {
+    let token = config.access_token.as_ref().context("Not logged in")?;
+    let cloud_id = config.cloud_id.as_ref().context("No cloud ID")?;
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.atlassian.com/ex/jira/{}/rest/api/3/issue/{}",
+        cloud_id, key
+    );
+
+    let response = client.get(&url).bearer_auth(token).send().await?;
+
+    if response.status() == 401 {
+        bail!("Unauthorized. Try: hu jira login");
+    }
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        bail!("Jira API error ({}): {}", status, text);
+    }
+
+    let issue: JiraIssue = response.json().await?;
+    Ok(issue)
+}
+
+pub async fn search_issues(config: &JiraConfig, jql: &str, max_results: u32) -> Result<SearchResult> {
+    let token = config.access_token.as_ref().context("Not logged in")?;
+    let cloud_id = config.cloud_id.as_ref().context("No cloud ID")?;
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.atlassian.com/ex/jira/{}/rest/api/3/search",
+        cloud_id
+    );
+
+    let response = client
+        .get(&url)
+        .bearer_auth(token)
+        .query(&[
+            ("jql", jql),
+            ("maxResults", &max_results.to_string()),
+            ("fields", "summary,status,assignee,priority,issuetype"),
+        ])
+        .send()
+        .await?;
+
+    if response.status() == 401 {
+        bail!("Unauthorized. Try: hu jira login");
+    }
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        bail!("Jira API error ({}): {}", status, text);
+    }
+
+    let result: SearchResult = response.json().await?;
+    Ok(result)
+}
+
+// ==================== Display ====================
+
+pub fn display_issue(issue: &JiraIssue) {
+    use colored::Colorize;
+
+    print_header(&format!("{}", issue.key.cyan().bold()));
+
+    println!("  {} {}", "Summary:".dimmed(), issue.fields.summary.white());
+
+    if let Some(status) = &issue.fields.status {
+        let status_colored = match status.name.to_lowercase().as_str() {
+            "done" | "closed" | "resolved" => status.name.green(),
+            "in progress" | "in review" => status.name.yellow(),
+            "blocked" => status.name.red(),
+            _ => status.name.cyan(),
+        };
+        println!("  {} {}", "Status:".dimmed(), status_colored);
+    }
+
+    if let Some(issue_type) = &issue.fields.issuetype {
+        println!("  {} {}", "Type:".dimmed(), issue_type.name.white());
+    }
+
+    if let Some(priority) = &issue.fields.priority {
+        let priority_colored = match priority.name.to_lowercase().as_str() {
+            "highest" | "critical" => priority.name.red().bold(),
+            "high" => priority.name.red(),
+            "medium" => priority.name.yellow(),
+            "low" => priority.name.green(),
+            "lowest" => priority.name.dimmed(),
+            _ => priority.name.white(),
+        };
+        println!("  {} {}", "Priority:".dimmed(), priority_colored);
+    }
+
+    if let Some(assignee) = &issue.fields.assignee {
+        println!("  {} {}", "Assignee:".dimmed(), assignee.display_name.white());
+    }
+
+    if let Some(reporter) = &issue.fields.reporter {
+        println!("  {} {}", "Reporter:".dimmed(), reporter.display_name.white());
+    }
+
+    println!();
+}
+
+pub fn display_search_results(result: &SearchResult) {
+    use colored::Colorize;
+    use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, Table};
+
+    if result.issues.is_empty() {
+        print_error("No issues found");
+        return;
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![
+            Cell::new("Key").fg(Color::Cyan),
+            Cell::new("Type").fg(Color::Magenta),
+            Cell::new("Status").fg(Color::Yellow),
+            Cell::new("Summary").fg(Color::White),
+            Cell::new("Assignee").fg(Color::Green),
+        ]);
+
+    for issue in &result.issues {
+        let issue_type = issue
+            .fields
+            .issuetype
+            .as_ref()
+            .map(|t| t.name.as_str())
+            .unwrap_or("-");
+        let status = issue
+            .fields
+            .status
+            .as_ref()
+            .map(|s| s.name.as_str())
+            .unwrap_or("-");
+        let assignee = issue
+            .fields
+            .assignee
+            .as_ref()
+            .map(|a| a.display_name.as_str())
+            .unwrap_or("Unassigned");
+        let summary = if issue.fields.summary.len() > 50 {
+            format!("{}...", &issue.fields.summary[..47])
+        } else {
+            issue.fields.summary.clone()
+        };
+
+        table.add_row(vec![
+            Cell::new(&issue.key).fg(Color::Cyan),
+            Cell::new(issue_type).fg(Color::Magenta),
+            Cell::new(status).fg(Color::Yellow),
+            Cell::new(summary).fg(Color::White),
+            Cell::new(assignee).fg(Color::Green),
+        ]);
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("Found {} issues (showing {})", result.total, result.issues.len())
+            .dimmed()
+    );
+    println!("{table}");
+    println!();
+}
+
+// ==================== Setup ====================
+
+pub fn setup() -> Result<()> {
+    use std::io::{stdin, stdout};
+
+    print_header("Jira OAuth Setup");
+    println!("Create an OAuth 2.0 app at: https://developer.atlassian.com/console/myapps/");
+    println!();
+
+    let mut config = load_jira_config()?;
+
+    print!("Client ID: ");
+    stdout().flush()?;
+    let mut client_id = String::new();
+    stdin().read_line(&mut client_id)?;
+    config.client_id = Some(client_id.trim().to_string());
+
+    print!("Client Secret: ");
+    stdout().flush()?;
+    let mut client_secret = String::new();
+    stdin().read_line(&mut client_secret)?;
+    config.client_secret = Some(client_secret.trim().to_string());
+
+    save_jira_config(&config)?;
+    print_success("Jira credentials saved!");
+    println!();
+    println!("Now run: hu jira login");
+
+    Ok(())
+}

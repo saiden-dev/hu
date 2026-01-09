@@ -1,6 +1,7 @@
 mod aws;
 mod commands;
 mod config;
+mod jira;
 mod utils;
 
 use anyhow::{Context, Result};
@@ -44,7 +45,10 @@ impl std::fmt::Display for Environment {
     hu eks --log                           \x1b[2m# Tail logs from all pods\x1b[0m
     hu aws whoami                          \x1b[2m# Show AWS identity\x1b[0m
     hu log                                 \x1b[2m# View local log file\x1b[0m
-    hu log -f                              \x1b[2m# Tail local log file\x1b[0m")]
+    hu log -f                              \x1b[2m# Tail local log file\x1b[0m
+    hu jira show PROJ-123                  \x1b[2m# Show issue details\x1b[0m
+    hu jira search \"bug login\"             \x1b[2m# Search issues\x1b[0m
+    hu jira mine                           \x1b[2m# My assigned issues\x1b[0m")]
 struct Args {
     #[command(subcommand)]
     command: Commands,
@@ -116,6 +120,12 @@ enum Commands {
         #[arg(long, default_value = "true")]
         colorize: bool,
     },
+
+    /// Jira ticket operations
+    Jira {
+        #[command(subcommand)]
+        action: JiraCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -181,6 +191,38 @@ enum AwsCommands {
 
     /// Login to AWS SSO
     Login,
+}
+
+#[derive(Subcommand, Debug)]
+enum JiraCommands {
+    /// Configure Jira OAuth credentials
+    Setup,
+
+    /// Login to Jira via browser OAuth
+    Login,
+
+    /// Show a specific issue
+    Show {
+        /// Issue key (e.g., PROJ-123)
+        key: String,
+    },
+
+    /// Search issues with JQL
+    Search {
+        /// JQL query or text search
+        query: String,
+
+        /// Maximum results to return
+        #[arg(short = 'n', long, default_value = "20")]
+        max: u32,
+    },
+
+    /// Search issues assigned to me
+    Mine {
+        /// Maximum results to return
+        #[arg(short = 'n', long, default_value = "20")]
+        max: u32,
+    },
 }
 
 fn detect_env() -> Option<Environment> {
@@ -415,6 +457,45 @@ async fn main() -> Result<()> {
                         log_file,
                     )
                     .await
+                }
+            }
+        }
+
+        Commands::Jira { action } => {
+            match action {
+                JiraCommands::Setup => jira::setup(),
+
+                JiraCommands::Login => {
+                    let mut config = jira::load_jira_config()?;
+                    jira::login(&mut config).await
+                }
+
+                JiraCommands::Show { key } => {
+                    let config = jira::load_jira_config()?;
+                    let issue = jira::get_issue(&config, &key).await?;
+                    jira::display_issue(&issue);
+                    Ok(())
+                }
+
+                JiraCommands::Search { query, max } => {
+                    let config = jira::load_jira_config()?;
+                    // If query doesn't look like JQL, wrap it in a text search
+                    let jql = if query.contains('=') || query.contains(" AND ") || query.contains(" OR ") {
+                        query
+                    } else {
+                        format!("text ~ \"{}\"", query)
+                    };
+                    let result = jira::search_issues(&config, &jql, max).await?;
+                    jira::display_search_results(&result);
+                    Ok(())
+                }
+
+                JiraCommands::Mine { max } => {
+                    let config = jira::load_jira_config()?;
+                    let jql = "assignee = currentUser() ORDER BY updated DESC";
+                    let result = jira::search_issues(&config, jql, max).await?;
+                    jira::display_search_results(&result);
+                    Ok(())
                 }
             }
         }
