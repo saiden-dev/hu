@@ -1,8 +1,9 @@
 name: Release
 
-# Temporarily disabled
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 env:
   CARGO_TERM_COLOR: always
