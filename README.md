@@ -1,13 +1,55 @@
 [![crates.io](https://img.shields.io/badge/crates.io-0.1.0--pre17-orange)](https://crates.io/crates/hu/0.1.0-pre17)
 
-aws sso login # if needed check if needed
+# hu
 
-aws eks update-kubeconfig --name prod-eks --region us-east-1 # from --env prod, alternative --env dev --env stg
+Dev workflow CLI for EKS pods, Jira, GitHub Actions, and AWS.
 
-kubectl get pod --namespace cms | grep web | awk '{print $1}' # web pattern from --type command
+## Install
 
-number pods 1,2,3 ... passed via --pod 1 switch
+```bash
+cargo install hu
+```
 
-kubectl exec -it eks-cms-web-deployment-5ffb745bd-bs6pv -n cms -- bash
+## Usage
 
-But I want a "prod-web-{number assigned earler} $ " PS prompt on my container bash
+```bash
+# EKS pods
+hu eks                    # List pods
+hu eks -p 1               # Shell into pod #1
+hu eks -e prod -t api     # List api pods on prod
+hu eks --log              # Tail logs from pods
+
+# EC2 instances
+hu ec2                    # List instances
+hu ec2 -e prod            # Filter by environment
+hu ec2 -t bastion -p 1    # Connect via SSM
+
+# AWS
+hu aws whoami             # Show identity
+hu aws discover           # Scan profiles & capabilities
+
+# Jira
+hu jira mine              # My assigned issues
+hu jira show PROJ-123     # Show issue details
+
+# GitHub
+hu gh runs                # Workflow runs
+hu gh runs --ok           # Only successful runs
+```
+
+## Config
+
+Settings file: `~/.config/hu/settings.toml`
+
+```toml
+[aws]
+region = "us-east-1"
+
+[kubernetes]
+namespace = "cms"
+pod_type = "web"
+
+[env.prod]
+cluster = "prod-eks"
+emoji = "🔴"
+```
