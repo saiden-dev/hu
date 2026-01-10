@@ -234,6 +234,15 @@ enum JiraCommands {
         #[arg(short = 'n', long, default_value = "20")]
         max: u32,
     },
+
+    /// Show project details
+    Project {
+        /// Project key (e.g., PROJ)
+        key: String,
+    },
+
+    /// List all projects
+    Projects,
 }
 
 fn detect_env() -> Option<Environment> {
@@ -518,6 +527,20 @@ async fn main() -> Result<()> {
                     let jql = "assignee = currentUser() ORDER BY updated DESC";
                     let result = jira::search_issues(&config, jql, max).await?;
                     jira::display_search_results(&result);
+                    Ok(())
+                }
+
+                JiraCommands::Project { key } => {
+                    let config = jira::load_jira_config()?;
+                    let project = jira::get_project(&config, &key).await?;
+                    jira::display_project(&project);
+                    Ok(())
+                }
+
+                JiraCommands::Projects => {
+                    let config = jira::load_jira_config()?;
+                    let projects = jira::list_projects(&config).await?;
+                    jira::display_projects(&projects);
                     Ok(())
                 }
             }
