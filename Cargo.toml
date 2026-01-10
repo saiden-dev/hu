@@ -1,6 +1,6 @@
 [package]
 name = "hu"
-version = "0.1.0-pre17"
+version = "0.1.0-pre18"
 edition = "2021"
 authors = ["Chi"]
 description = "Dev workflow CLI: EKS pods, Jira tickets, GitHub PRs, AWS pipelines"
