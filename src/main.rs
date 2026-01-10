@@ -603,17 +603,13 @@ async fn main() -> Result<()> {
                 GitHubCommands::Runs { repo, status, max } => {
                     let config = github::load_github_config()?;
                     let repo = repo
+                        .map(|r| github::normalize_repo(&r))
                         .or_else(|| config.default_repo.clone())
                         .or_else(github::detect_repo)
                         .context("No repository specified. Use -r owner/repo or run from a git directory")?;
 
-                    let runs = github::get_workflow_runs(
-                        &config,
-                        &repo,
-                        status.as_deref(),
-                        max,
-                    )
-                    .await?;
+                    let runs =
+                        github::get_workflow_runs(&config, &repo, status.as_deref(), max).await?;
                     github::display_workflow_runs(&runs, &repo);
                     Ok(())
                 }
