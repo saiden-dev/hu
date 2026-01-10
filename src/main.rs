@@ -135,8 +135,11 @@ enum Commands {
         action: Option<GitHubCommands>,
     },
 
-    /// EC2 instance operations (read-only)
+    /// EC2 instance operations
     Ec2 {
+        #[command(subcommand)]
+        action: Option<Ec2Commands>,
+
         /// Filter by Environment tag (prod, dev, stg)
         #[arg(short, long, value_enum)]
         env: Option<Environment>,
@@ -317,6 +320,57 @@ enum GitHubCommands {
         /// Maximum results
         #[arg(short = 'n', long, default_value = "15")]
         max: u32,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum Ec2Commands {
+    /// List EC2 instances (default)
+    List {
+        /// Filter by Environment tag (prod, dev, stg)
+        #[arg(short, long, value_enum)]
+        env: Option<Environment>,
+
+        /// Filter by Name tag pattern
+        #[arg(short = 't', long = "tag")]
+        name_filter: Option<String>,
+
+        /// Instance number to connect to via SSM
+        #[arg(short = 'p', long = "connect")]
+        connect: Option<usize>,
+
+        /// Show all instances (including unnamed/terminated)
+        #[arg(long)]
+        all: bool,
+
+        /// Show only stopped instances
+        #[arg(long)]
+        stopped: bool,
+    },
+
+    /// Spawn a temporary EC2 instance with random SSH port
+    Spawn {
+        /// Instance type
+        #[arg(short = 't', long, default_value = "t4g.nano")]
+        instance_type: String,
+
+        /// AMI ID (default: latest Amazon Linux 2023 ARM)
+        #[arg(long)]
+        ami: Option<String>,
+
+        /// Your IP for security group CIDR (default: auto-detect)
+        #[arg(long)]
+        my_ip: Option<String>,
+
+        /// Public TCP ports (e.g., --public 443,8080)
+        #[arg(short = 'p', long, value_delimiter = ',')]
+        public: Option<Vec<u16>>,
+    },
+
+    /// Terminate a spawned instance and cleanup resources
+    Kill {
+        /// Instance ID to terminate
+        instance_id: String,
     },
 }
 
@@ -735,26 +789,78 @@ async fn main() -> Result<()> {
         }
 
         Commands::Ec2 {
+            action,
             env,
             name_filter,
             connect,
             all,
             stopped,
         } => {
-            let filter = aws::Ec2Filter {
-                env: env.map(|e| e.as_str().to_string()),
-                name_filter,
-                show_all: all,
-                stopped_only: stopped,
-            };
-            let instances = aws::list_instances(&settings.aws.region, &filter).await?;
+            match action {
+                Some(Ec2Commands::Spawn {
+                    instance_type,
+                    ami,
+                    my_ip,
+                    public,
+                }) => {
+                    let aws_config = ensure_aws_session(None, &settings.aws.region).await?;
+                    let spawn_cfg = aws::SpawnConfig {
+                        instance_type,
+                        ami,
+                        my_ip,
+                        public_ports: public.unwrap_or_default(),
+                    };
+                    let spawned = aws::spawn_instance(&aws_config, &spawn_cfg).await?;
+                    aws::display_spawned_instance(&spawned);
+                    Ok(())
+                }
 
-            if let Some(num) = connect {
-                aws::ssm_connect(&instances, num)?;
-            } else {
-                aws::display_instances(&instances);
+                Some(Ec2Commands::Kill { instance_id }) => {
+                    let aws_config = ensure_aws_session(None, &settings.aws.region).await?;
+                    aws::kill_instance(&aws_config, &instance_id).await
+                }
+
+                Some(Ec2Commands::List {
+                    env: sub_env,
+                    name_filter: sub_name,
+                    connect: sub_connect,
+                    all: sub_all,
+                    stopped: sub_stopped,
+                }) => {
+                    let filter = aws::Ec2Filter {
+                        env: sub_env.or(env).map(|e| e.as_str().to_string()),
+                        name_filter: sub_name.or(name_filter),
+                        show_all: sub_all || all,
+                        stopped_only: sub_stopped || stopped,
+                    };
+                    let instances = aws::list_instances(&settings.aws.region, &filter).await?;
+
+                    if let Some(num) = sub_connect.or(connect) {
+                        aws::ssm_connect(&instances, num)?;
+                    } else {
+                        aws::display_instances(&instances);
+                    }
+                    Ok(())
+                }
+
+                None => {
+                    // Default: list instances
+                    let filter = aws::Ec2Filter {
+                        env: env.map(|e| e.as_str().to_string()),
+                        name_filter,
+                        show_all: all,
+                        stopped_only: stopped,
+                    };
+                    let instances = aws::list_instances(&settings.aws.region, &filter).await?;
+
+                    if let Some(num) = connect {
+                        aws::ssm_connect(&instances, num)?;
+                    } else {
+                        aws::display_instances(&instances);
+                    }
+                    Ok(())
+                }
             }
-            Ok(())
         }
     }
 }
