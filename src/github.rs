@@ -44,18 +44,27 @@ pub fn save_github_config(config: &GitHubConfig) -> Result<()> {
 
 // ==================== API Types ====================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct WorkflowRun {
     pub name: String,
     pub head_branch: String,
     pub status: String,
     pub conclusion: Option<String>,
     pub display_title: Option<String>,
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct WorkflowRunsResponse {
     pub workflow_runs: Vec<WorkflowRun>,
+}
+
+/// Workflow run with associated repo info for multi-repo queries
+#[derive(Debug, Clone)]
+pub struct ProjectWorkflowRun {
+    pub run: WorkflowRun,
+    pub repo: String,
+    pub repo_label: String,
 }
 
 // ==================== API Functions ====================
@@ -170,6 +179,77 @@ fn is_running_or_successful(run: &WorkflowRun) -> bool {
     }
 }
 
+/// Repo info for multi-repo queries
+pub struct RepoInfo {
+    pub github: String,
+    pub label: String,
+}
+
+/// Fetch workflow runs from multiple repos concurrently
+pub async fn get_project_workflow_runs(
+    config: &GitHubConfig,
+    repos: &[RepoInfo],
+    filter: &RunsFilter<'_>,
+    limit: u32,
+) -> Result<Vec<ProjectWorkflowRun>> {
+    use futures::future::join_all;
+
+    // Fetch from all repos concurrently
+    let futures: Vec<_> = repos
+        .iter()
+        .map(|repo_info| {
+            let config = config.clone();
+            let filter_actor = filter.actor.map(String::from);
+            let filter_workflow = filter.workflow.map(String::from);
+            let filter_project_key = filter.project_key.map(String::from);
+            let success_only = filter.success_only;
+            let repo = repo_info.github.clone();
+            let label = repo_info.label.clone();
+
+            async move {
+                let filter = RunsFilter {
+                    actor: filter_actor.as_deref(),
+                    workflow: filter_workflow.as_deref(),
+                    success_only,
+                    project_key: filter_project_key.as_deref(),
+                };
+                // Fetch more per repo, we'll merge and limit later
+                let per_repo_limit = (limit / repos.len() as u32).max(5);
+                match get_workflow_runs(&config, &repo, &filter, per_repo_limit).await {
+                    Ok(response) => response
+                        .workflow_runs
+                        .into_iter()
+                        .map(|run| ProjectWorkflowRun {
+                            run,
+                            repo: repo.clone(),
+                            repo_label: label.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                    Err(e) => {
+                        eprintln!("Warning: Failed to fetch from {}: {}", repo, e);
+                        vec![]
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let results = join_all(futures).await;
+
+    // Flatten and sort by created_at (most recent first)
+    let mut all_runs: Vec<ProjectWorkflowRun> = results.into_iter().flatten().collect();
+    all_runs.sort_by(|a, b| {
+        let a_time = a.run.created_at.as_deref().unwrap_or("");
+        let b_time = b.run.created_at.as_deref().unwrap_or("");
+        b_time.cmp(a_time) // Reverse order (newest first)
+    });
+
+    // Limit total results
+    all_runs.truncate(limit as usize);
+
+    Ok(all_runs)
+}
+
 // ==================== Display ====================
 
 pub fn display_workflow_runs(runs: &WorkflowRunsResponse, repo: &str) {
@@ -231,6 +311,80 @@ pub fn display_workflow_runs(runs: &WorkflowRunsResponse, repo: &str) {
     println!(
         "{}",
         format!("{} - {} workflow runs", repo, runs.workflow_runs.len()).dimmed()
+    );
+    println!("{table}");
+    println!();
+}
+
+pub fn display_project_workflow_runs(runs: &[ProjectWorkflowRun], project_name: &str) {
+    use colored::Colorize;
+    use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, Table};
+
+    if runs.is_empty() {
+        print_error("No workflow runs found");
+        return;
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![
+            Cell::new("").fg(Color::Yellow),
+            Cell::new("Repo").fg(Color::Cyan),
+            Cell::new("Title").fg(Color::White),
+            Cell::new("Branch").fg(Color::Magenta),
+        ]);
+
+    for proj_run in runs {
+        let run = &proj_run.run;
+        let status_icon = match (run.status.as_str(), run.conclusion.as_deref()) {
+            ("completed", Some("success")) => "✓".green().to_string(),
+            ("completed", Some("failure")) => "✗".red().to_string(),
+            ("completed", Some("cancelled")) => "⊘".dimmed().to_string(),
+            ("in_progress", _) => "●".yellow().to_string(),
+            ("queued", _) | ("waiting", _) => "○".blue().to_string(),
+            _ => "?".white().to_string(),
+        };
+
+        // Use display_title (PR title) which includes Jira ticket
+        let title = run
+            .display_title
+            .as_ref()
+            .map(|t| {
+                if t.len() > 45 {
+                    format!("{}...", &t[..42])
+                } else {
+                    t.clone()
+                }
+            })
+            .unwrap_or_else(|| run.name.clone());
+
+        let branch = if run.head_branch.len() > 20 {
+            format!("{}...", &run.head_branch[..17])
+        } else {
+            run.head_branch.clone()
+        };
+
+        // Short repo label
+        let repo_label = if proj_run.repo_label.len() > 10 {
+            format!("{}...", &proj_run.repo_label[..7])
+        } else {
+            proj_run.repo_label.clone()
+        };
+
+        table.add_row(vec![
+            Cell::new(&status_icon),
+            Cell::new(&repo_label).fg(Color::Cyan),
+            Cell::new(&title).fg(Color::White),
+            Cell::new(&branch).fg(Color::DarkGrey),
+        ]);
+    }
+
+    println!();
+    println!(
+        "{}",
+        format!("{} - {} workflow runs", project_name, runs.len()).dimmed()
     );
     println!("{table}");
     println!();

@@ -21,6 +21,7 @@ comfy-table = "7"
 
 # Async runtime for parallel log tailing
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 
 # Error handling
 anyhow = "1"

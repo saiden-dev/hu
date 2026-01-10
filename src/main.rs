@@ -630,32 +630,82 @@ async fn main() -> Result<()> {
                     max,
                 } => {
                     let gh_config = github::load_github_config()?;
-                    let repo = repo
-                        .map(|r| github::normalize_repo(&r))
-                        .or_else(|| gh_config.default_repo.clone())
-                        .or_else(github::detect_repo)
-                        .context("No repository specified. Use -r owner/repo or run from a git directory")?;
 
-                    // Use CLI args, fall back to config defaults
-                    let actor = actor.or_else(|| gh_config.default_actor.clone());
-                    let workflow = workflow.or_else(|| gh_config.default_workflow.clone());
-
-                    // Get project from CLI, github.json, or settings.toml
-                    let project = project
+                    // Get project key from CLI, github.json, or settings.toml
+                    let project_key = project
                         .or_else(|| gh_config.default_project.clone())
                         .or_else(|| settings.github.default_project.clone());
 
-                    // Filter by project key prefix (e.g., BFR-) unless --all-branches
-                    let project_key = if all_branches { None } else { project };
-
-                    let filter = github::RunsFilter {
-                        actor: actor.as_deref(),
-                        workflow: workflow.as_deref(),
-                        success_only: ok,
-                        project_key: project_key.as_deref(),
+                    // Filter by project key prefix unless --all-branches
+                    let filter_project_key = if all_branches {
+                        None
+                    } else {
+                        project_key.clone()
                     };
-                    let runs = github::get_workflow_runs(&gh_config, &repo, &filter, max).await?;
-                    github::display_workflow_runs(&runs, &repo);
+
+                    // Check if we should use project repos (no explicit repo and project has repos)
+                    let project_config = project_key
+                        .as_ref()
+                        .and_then(|key| settings.project.projects.get(key));
+
+                    if repo.is_none()
+                        && project_config.map(|p| !p.repos.is_empty()).unwrap_or(false)
+                    {
+                        // Multi-repo mode: fetch from all project repos
+                        let project_config = project_config.unwrap();
+
+                        // Build repo list from project config
+                        let repos: Vec<github::RepoInfo> = project_config
+                            .repos
+                            .iter()
+                            .map(|(label, repo_cfg)| github::RepoInfo {
+                                github: repo_cfg.github.clone(),
+                                label: label.clone(),
+                            })
+                            .collect();
+
+                        // Use project-level defaults for actor/workflow, fall back to github.json
+                        let actor = actor
+                            .or_else(|| project_config.github_actor.clone())
+                            .or_else(|| gh_config.default_actor.clone());
+                        let workflow = workflow
+                            .or_else(|| project_config.github_workflow.clone())
+                            .or_else(|| gh_config.default_workflow.clone());
+
+                        let filter = github::RunsFilter {
+                            actor: actor.as_deref(),
+                            workflow: workflow.as_deref(),
+                            success_only: ok,
+                            project_key: filter_project_key.as_deref(),
+                        };
+
+                        let runs =
+                            github::get_project_workflow_runs(&gh_config, &repos, &filter, max)
+                                .await?;
+                        github::display_project_workflow_runs(&runs, &project_config.name);
+                    } else {
+                        // Single repo mode
+                        let repo = repo
+                            .map(|r| github::normalize_repo(&r))
+                            .or_else(|| gh_config.default_repo.clone())
+                            .or_else(github::detect_repo)
+                            .context(
+                                "No repository specified. Use -r owner/repo or run from a git directory",
+                            )?;
+
+                        let actor = actor.or_else(|| gh_config.default_actor.clone());
+                        let workflow = workflow.or_else(|| gh_config.default_workflow.clone());
+
+                        let filter = github::RunsFilter {
+                            actor: actor.as_deref(),
+                            workflow: workflow.as_deref(),
+                            success_only: ok,
+                            project_key: filter_project_key.as_deref(),
+                        };
+                        let runs =
+                            github::get_workflow_runs(&gh_config, &repo, &filter, max).await?;
+                        github::display_workflow_runs(&runs, &repo);
+                    }
                     Ok(())
                 }
             }
