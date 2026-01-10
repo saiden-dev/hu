@@ -59,9 +59,17 @@ pub struct Settings {
     #[serde(default)]
     pub logging: LoggingSettings,
     #[serde(default)]
+    pub github: GitHubSettings,
+    #[serde(default)]
     pub default_env: Option<String>,
     #[serde(default)]
     pub env: HashMap<String, EnvConfig>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GitHubSettings {
+    pub default_project: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

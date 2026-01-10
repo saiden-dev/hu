@@ -14,6 +14,7 @@ pub struct GitHubConfig {
     pub default_repo: Option<String>,
     pub default_actor: Option<String>,
     pub default_workflow: Option<String>,
+    pub default_project: Option<String>,
 }
 
 fn get_github_config_path() -> Result<PathBuf> {
@@ -49,20 +50,7 @@ pub struct WorkflowRun {
     pub head_branch: String,
     pub status: String,
     pub conclusion: Option<String>,
-    pub run_number: u64,
-    pub head_commit: Option<HeadCommit>,
-    pub actor: Option<Actor>,
-    pub triggering_actor: Option<Actor>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Actor {
-    pub login: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HeadCommit {
-    pub message: String,
+    pub display_title: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +75,7 @@ pub struct RunsFilter<'a> {
     pub actor: Option<&'a str>,
     pub workflow: Option<&'a str>,
     pub success_only: bool,
+    pub project_key: Option<&'a str>,
 }
 
 pub async fn get_workflow_runs(
@@ -100,11 +89,12 @@ pub async fn get_workflow_runs(
     let url = format!("{}/repos/{}/actions/runs", GITHUB_API_URL, repo);
 
     // Fetch more than requested to allow for client-side filtering
-    let fetch_limit = if filter.workflow.is_some() || filter.success_only {
-        (limit * 5).min(100)
-    } else {
-        limit
-    };
+    let fetch_limit =
+        if filter.workflow.is_some() || filter.success_only || filter.project_key.is_some() {
+            (limit * 5).min(100)
+        } else {
+            limit
+        };
 
     let mut query = vec![("per_page", fetch_limit.to_string())];
     if let Some(actor) = filter.actor {
@@ -143,6 +133,15 @@ pub async fn get_workflow_runs(
             if let Some(wf) = filter.workflow {
                 let wf_lower = wf.to_lowercase();
                 if !run.name.to_lowercase().contains(&wf_lower) {
+                    return false;
+                }
+            }
+
+            // Filter by project key prefix in branch (e.g., BFR-)
+            if let Some(key) = filter.project_key {
+                let branch_upper = run.head_branch.to_uppercase();
+                let key_prefix = format!("{}-", key.to_uppercase());
+                if !branch_upper.contains(&key_prefix) {
                     return false;
                 }
             }
@@ -187,72 +186,44 @@ pub fn display_workflow_runs(runs: &WorkflowRunsResponse, repo: &str) {
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_header(vec![
-            Cell::new("Run").fg(Color::Cyan),
-            Cell::new("Actor").fg(Color::Blue),
+            Cell::new("").fg(Color::Yellow),
+            Cell::new("Title").fg(Color::White),
             Cell::new("Branch").fg(Color::Magenta),
-            Cell::new("Status").fg(Color::Yellow),
-            Cell::new("Commit").fg(Color::White),
         ]);
 
     for run in &runs.workflow_runs {
-        let status_display = match (run.status.as_str(), run.conclusion.as_deref()) {
-            ("completed", Some("success")) => "success".to_string(),
-            ("completed", Some("failure")) => "failure".to_string(),
-            ("completed", Some("cancelled")) => "cancelled".to_string(),
-            ("completed", Some(c)) => c.to_string(),
-            ("in_progress", _) => "running".to_string(),
-            ("queued", _) => "queued".to_string(),
-            ("waiting", _) => "waiting".to_string(),
-            (s, _) => s.to_string(),
+        let status_icon = match (run.status.as_str(), run.conclusion.as_deref()) {
+            ("completed", Some("success")) => "✓".green().to_string(),
+            ("completed", Some("failure")) => "✗".red().to_string(),
+            ("completed", Some("cancelled")) => "⊘".dimmed().to_string(),
+            ("in_progress", _) => "●".yellow().to_string(),
+            ("queued", _) | ("waiting", _) => "○".blue().to_string(),
+            _ => "?".white().to_string(),
         };
 
-        let status_color = match status_display.as_str() {
-            "success" => Color::Green,
-            "failure" => Color::Red,
-            "cancelled" => Color::DarkGrey,
-            "running" => Color::Yellow,
-            "queued" | "waiting" => Color::Blue,
-            _ => Color::White,
-        };
+        // Use display_title (PR title) which includes Jira ticket
+        let title = run
+            .display_title
+            .as_ref()
+            .map(|t| {
+                if t.len() > 55 {
+                    format!("{}...", &t[..52])
+                } else {
+                    t.clone()
+                }
+            })
+            .unwrap_or_else(|| run.name.clone());
 
-        let workflow_name = if run.name.len() > 25 {
-            format!("{}...", &run.name[..22])
-        } else {
-            run.name.clone()
-        };
-
-        let branch = if run.head_branch.len() > 20 {
-            format!("{}...", &run.head_branch[..17])
+        let branch = if run.head_branch.len() > 25 {
+            format!("{}...", &run.head_branch[..22])
         } else {
             run.head_branch.clone()
         };
 
-        let commit_msg = run
-            .head_commit
-            .as_ref()
-            .map(|c| {
-                let first_line = c.message.lines().next().unwrap_or("");
-                if first_line.len() > 35 {
-                    format!("{}...", &first_line[..32])
-                } else {
-                    first_line.to_string()
-                }
-            })
-            .unwrap_or_else(|| "-".to_string());
-
-        let actor = run
-            .triggering_actor
-            .as_ref()
-            .or(run.actor.as_ref())
-            .map(|a| a.login.clone())
-            .unwrap_or_else(|| "-".to_string());
-
         table.add_row(vec![
-            Cell::new(format!("#{}", run.run_number)).fg(Color::Cyan),
-            Cell::new(actor).fg(Color::Blue),
-            Cell::new(branch).fg(Color::Magenta),
-            Cell::new(&status_display).fg(status_color),
-            Cell::new(commit_msg).fg(Color::DarkGrey),
+            Cell::new(&status_icon),
+            Cell::new(&title).fg(Color::White),
+            Cell::new(&branch).fg(Color::DarkGrey),
         ]);
     }
 

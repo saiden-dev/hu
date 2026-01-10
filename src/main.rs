@@ -279,6 +279,14 @@ enum GitHubCommands {
         #[arg(short, long)]
         workflow: Option<String>,
 
+        /// Jira project to filter by active sprint tasks (e.g., BFR)
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Show all branches (default: only active sprint task branches)
+        #[arg(long)]
+        all_branches: bool,
+
         /// Show only running + successful (default: all states)
         #[arg(long)]
         ok: bool,
@@ -604,6 +612,8 @@ async fn main() -> Result<()> {
                 repo: None,
                 actor: None,
                 workflow: None,
+                project: None,
+                all_branches: false,
                 ok: false,
                 max: 15,
             });
@@ -614,26 +624,37 @@ async fn main() -> Result<()> {
                     repo,
                     actor,
                     workflow,
+                    project,
+                    all_branches,
                     ok,
                     max,
                 } => {
-                    let config = github::load_github_config()?;
+                    let gh_config = github::load_github_config()?;
                     let repo = repo
                         .map(|r| github::normalize_repo(&r))
-                        .or_else(|| config.default_repo.clone())
+                        .or_else(|| gh_config.default_repo.clone())
                         .or_else(github::detect_repo)
                         .context("No repository specified. Use -r owner/repo or run from a git directory")?;
 
                     // Use CLI args, fall back to config defaults
-                    let actor = actor.or_else(|| config.default_actor.clone());
-                    let workflow = workflow.or_else(|| config.default_workflow.clone());
+                    let actor = actor.or_else(|| gh_config.default_actor.clone());
+                    let workflow = workflow.or_else(|| gh_config.default_workflow.clone());
+
+                    // Get project from CLI, github.json, or settings.toml
+                    let project = project
+                        .or_else(|| gh_config.default_project.clone())
+                        .or_else(|| settings.github.default_project.clone());
+
+                    // Filter by project key prefix (e.g., BFR-) unless --all-branches
+                    let project_key = if all_branches { None } else { project };
 
                     let filter = github::RunsFilter {
                         actor: actor.as_deref(),
                         workflow: workflow.as_deref(),
                         success_only: ok,
+                        project_key: project_key.as_deref(),
                     };
-                    let runs = github::get_workflow_runs(&config, &repo, &filter, max).await?;
+                    let runs = github::get_workflow_runs(&gh_config, &repo, &filter, max).await?;
                     github::display_workflow_runs(&runs, &repo);
                     Ok(())
                 }
