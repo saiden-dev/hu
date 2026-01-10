@@ -267,13 +267,21 @@ enum GitHubCommands {
 
     /// List workflow runs (default)
     Runs {
-        /// Repository (owner/repo), defaults to current git repo
+        /// Repository (owner/repo or full git URL), defaults to current git repo
         #[arg(short, long)]
         repo: Option<String>,
 
-        /// Filter by status: queued, in_progress, completed
+        /// Filter by actor (GitHub username)
         #[arg(short, long)]
-        status: Option<String>,
+        actor: Option<String>,
+
+        /// Filter by workflow name (partial match)
+        #[arg(short, long)]
+        workflow: Option<String>,
+
+        /// Show all states (default: running + successful only)
+        #[arg(long)]
+        all: bool,
 
         /// Maximum results
         #[arg(short = 'n', long, default_value = "15")]
@@ -594,13 +602,21 @@ async fn main() -> Result<()> {
         Commands::GitHub { action } => {
             let action = action.unwrap_or(GitHubCommands::Runs {
                 repo: None,
-                status: None,
+                actor: None,
+                workflow: None,
+                all: false,
                 max: 15,
             });
             match action {
                 GitHubCommands::Setup => github::setup(),
 
-                GitHubCommands::Runs { repo, status, max } => {
+                GitHubCommands::Runs {
+                    repo,
+                    actor,
+                    workflow,
+                    all,
+                    max,
+                } => {
                     let config = github::load_github_config()?;
                     let repo = repo
                         .map(|r| github::normalize_repo(&r))
@@ -608,8 +624,12 @@ async fn main() -> Result<()> {
                         .or_else(github::detect_repo)
                         .context("No repository specified. Use -r owner/repo or run from a git directory")?;
 
-                    let runs =
-                        github::get_workflow_runs(&config, &repo, status.as_deref(), max).await?;
+                    let filter = github::RunsFilter {
+                        actor: actor.as_deref(),
+                        workflow: workflow.as_deref(),
+                        show_all: all,
+                    };
+                    let runs = github::get_workflow_runs(&config, &repo, &filter, max).await?;
                     github::display_workflow_runs(&runs, &repo);
                     Ok(())
                 }

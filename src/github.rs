@@ -74,19 +74,32 @@ fn get_client(config: &GitHubConfig) -> Result<(reqwest::Client, String)> {
     Ok((client, token.clone()))
 }
 
+pub struct RunsFilter<'a> {
+    pub actor: Option<&'a str>,
+    pub workflow: Option<&'a str>,
+    pub show_all: bool,
+}
+
 pub async fn get_workflow_runs(
     config: &GitHubConfig,
     repo: &str,
-    status: Option<&str>,
+    filter: &RunsFilter<'_>,
     limit: u32,
 ) -> Result<WorkflowRunsResponse> {
     let (client, token) = get_client(config)?;
 
     let url = format!("{}/repos/{}/actions/runs", GITHUB_API_URL, repo);
 
-    let mut query = vec![("per_page", limit.to_string())];
-    if let Some(s) = status {
-        query.push(("status", s.to_string()));
+    // Fetch more than requested to allow for client-side filtering
+    let fetch_limit = if filter.workflow.is_some() || !filter.show_all {
+        (limit * 5).min(100)
+    } else {
+        limit
+    };
+
+    let mut query = vec![("per_page", fetch_limit.to_string())];
+    if let Some(actor) = filter.actor {
+        query.push(("actor", actor.to_string()));
     }
 
     let response = client
@@ -110,8 +123,46 @@ pub async fn get_workflow_runs(
         bail!("GitHub API error ({}): {}", status, text);
     }
 
-    let result: WorkflowRunsResponse = response.json().await?;
+    let mut result: WorkflowRunsResponse = response.json().await?;
+
+    // Client-side filtering
+    result.workflow_runs = result
+        .workflow_runs
+        .into_iter()
+        .filter(|run| {
+            // Filter by workflow name (case-insensitive partial match)
+            if let Some(wf) = filter.workflow {
+                let wf_lower = wf.to_lowercase();
+                if !run.name.to_lowercase().contains(&wf_lower) {
+                    return false;
+                }
+            }
+
+            // Filter by status: show running + successful by default
+            if !filter.show_all {
+                let dominated_count = is_running_or_successful(run);
+                if !dominated_count {
+                    return false;
+                }
+            }
+
+            true
+        })
+        .take(limit as usize)
+        .collect();
+
     Ok(result)
+}
+
+fn is_running_or_successful(run: &WorkflowRun) -> bool {
+    match (run.status.as_str(), run.conclusion.as_deref()) {
+        // Running states
+        ("in_progress", _) | ("queued", _) | ("waiting", _) | ("pending", _) => true,
+        // Successful
+        ("completed", Some("success")) => true,
+        // Everything else (failure, cancelled, etc.)
+        _ => false,
+    }
 }
 
 // ==================== Display ====================
