@@ -51,6 +51,13 @@ pub struct WorkflowRun {
     pub conclusion: Option<String>,
     pub run_number: u64,
     pub head_commit: Option<HeadCommit>,
+    pub actor: Option<Actor>,
+    pub triggering_actor: Option<Actor>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Actor {
+    pub login: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,7 +86,7 @@ fn get_client(config: &GitHubConfig) -> Result<(reqwest::Client, String)> {
 pub struct RunsFilter<'a> {
     pub actor: Option<&'a str>,
     pub workflow: Option<&'a str>,
-    pub show_all: bool,
+    pub success_only: bool,
 }
 
 pub async fn get_workflow_runs(
@@ -93,7 +100,7 @@ pub async fn get_workflow_runs(
     let url = format!("{}/repos/{}/actions/runs", GITHUB_API_URL, repo);
 
     // Fetch more than requested to allow for client-side filtering
-    let fetch_limit = if filter.workflow.is_some() || !filter.show_all {
+    let fetch_limit = if filter.workflow.is_some() || filter.success_only {
         (limit * 5).min(100)
     } else {
         limit
@@ -140,12 +147,9 @@ pub async fn get_workflow_runs(
                 }
             }
 
-            // Filter by status: show running + successful by default
-            if !filter.show_all {
-                let dominated_count = is_running_or_successful(run);
-                if !dominated_count {
-                    return false;
-                }
+            // Filter by status if --ok flag is set
+            if filter.success_only && !is_running_or_successful(run) {
+                return false;
             }
 
             true
@@ -184,7 +188,7 @@ pub fn display_workflow_runs(runs: &WorkflowRunsResponse, repo: &str) {
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_header(vec![
             Cell::new("Run").fg(Color::Cyan),
-            Cell::new("Workflow").fg(Color::White),
+            Cell::new("Actor").fg(Color::Blue),
             Cell::new("Branch").fg(Color::Magenta),
             Cell::new("Status").fg(Color::Yellow),
             Cell::new("Commit").fg(Color::White),
@@ -236,9 +240,16 @@ pub fn display_workflow_runs(runs: &WorkflowRunsResponse, repo: &str) {
             })
             .unwrap_or_else(|| "-".to_string());
 
+        let actor = run
+            .triggering_actor
+            .as_ref()
+            .or(run.actor.as_ref())
+            .map(|a| a.login.clone())
+            .unwrap_or_else(|| "-".to_string());
+
         table.add_row(vec![
             Cell::new(format!("#{}", run.run_number)).fg(Color::Cyan),
-            Cell::new(workflow_name).fg(Color::White),
+            Cell::new(actor).fg(Color::Blue),
             Cell::new(branch).fg(Color::Magenta),
             Cell::new(&status_display).fg(status_color),
             Cell::new(commit_msg).fg(Color::DarkGrey),
