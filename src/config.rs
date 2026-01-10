@@ -32,6 +32,27 @@ capabilities = ["ec2"]
 # [logging]
 # log_path = "~/.config/hu/{env}.log"
 
+# [github]
+# default_project = "BFR"
+
+# Project configuration
+# Link Jira projects to GitHub repos for unified workflow tracking
+#
+# [project.BFR]
+# name = "Traveler Experience"
+# jira_key = "BFR"
+# github_actor = "username"
+# github_workflow = "CI Tests"
+# pipeline = "cms"
+#
+# [project.BFR.repos.api]
+# path = "~/Projects/my-api"
+# github = "myorg/my-api"
+#
+# [project.BFR.repos.frontend]
+# path = "~/Projects/my-frontend"
+# github = "myorg/my-frontend"
+
 # default_env = "dev"
 
 [env.dev]
@@ -61,6 +82,8 @@ pub struct Settings {
     #[serde(default)]
     pub github: GitHubSettings,
     #[serde(default)]
+    pub project: ProjectSettings,
+    #[serde(default)]
     pub default_env: Option<String>,
     #[serde(default)]
     pub env: HashMap<String, EnvConfig>,
@@ -70,6 +93,40 @@ pub struct Settings {
 #[serde(default)]
 pub struct GitHubSettings {
     pub default_project: Option<String>,
+}
+
+// ==================== Project Config ====================
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectSettings {
+    #[serde(flatten)]
+    pub projects: HashMap<String, ProjectConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    /// Display name for the project
+    pub name: String,
+    /// Jira project key (e.g., "BFR")
+    pub jira_key: String,
+    /// Repositories associated with this project
+    #[serde(default)]
+    pub repos: HashMap<String, RepoConfig>,
+    /// Default GitHub actor for filtering workflow runs
+    pub github_actor: Option<String>,
+    /// Default GitHub workflow name for filtering
+    pub github_workflow: Option<String>,
+    /// AWS CodePipeline name (if applicable)
+    pub pipeline: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoConfig {
+    /// Local path to the repository
+    pub path: Option<String>,
+    /// GitHub repository (owner/repo format)
+    pub github: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
