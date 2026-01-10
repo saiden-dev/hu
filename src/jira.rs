@@ -16,6 +16,38 @@ const AUTH_URL: &str = "https://auth.atlassian.com/authorize";
 const TOKEN_URL: &str = "https://auth.atlassian.com/oauth/token";
 const CALLBACK_PORT: u16 = 8765;
 
+// ==================== Helpers ====================
+
+fn strip_html(html: &str) -> String {
+    let mut result = html
+        .replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">");
+
+    // Simple HTML tag stripper
+    let mut output = String::with_capacity(result.len());
+    let mut in_tag = false;
+    for c in result.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => output.push(c),
+            _ => {}
+        }
+    }
+    result = output;
+
+    // Collapse multiple newlines
+    while result.contains("\n\n\n") {
+        result = result.replace("\n\n\n", "\n\n");
+    }
+    result.trim().to_string()
+}
+
 // ==================== Config ====================
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -261,15 +293,184 @@ pub struct IssueType {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub issues: Vec<JiraIssue>,
     /// Total count (not returned by new /search/jql endpoint)
     #[serde(default)]
     pub total: Option<u32>,
-    /// Indicates if this is the last page of results
-    #[serde(default)]
-    pub is_last: Option<bool>,
+}
+
+// ==================== Project Types ====================
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraProject {
+    pub key: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub lead: Option<User>,
+    pub project_type_key: Option<String>,
+    pub style: Option<String>,
+}
+
+pub async fn get_project(config: &JiraConfig, key: &str) -> Result<JiraProject> {
+    let token = config.access_token.as_ref().context("Not logged in")?;
+    let cloud_id = config.cloud_id.as_ref().context("No cloud ID")?;
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.atlassian.com/ex/jira/{}/rest/api/3/project/{}",
+        cloud_id, key
+    );
+
+    let response = client.get(&url).bearer_auth(token).send().await?;
+
+    if response.status() == 401 {
+        bail!("Unauthorized. Try: hu jira login");
+    }
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        bail!("Jira API error ({}): {}", status, text);
+    }
+
+    let project: JiraProject = response.json().await?;
+    Ok(project)
+}
+
+pub async fn list_projects(config: &JiraConfig) -> Result<Vec<JiraProject>> {
+    let token = config.access_token.as_ref().context("Not logged in")?;
+    let cloud_id = config.cloud_id.as_ref().context("No cloud ID")?;
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.atlassian.com/ex/jira/{}/rest/api/3/project/search",
+        cloud_id
+    );
+
+    let response = client
+        .get(&url)
+        .bearer_auth(token)
+        .query(&[("maxResults", "100"), ("orderBy", "name")])
+        .send()
+        .await?;
+
+    if response.status() == 401 {
+        bail!("Unauthorized. Try: hu jira login");
+    }
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        bail!("Jira API error ({}): {}", status, text);
+    }
+
+    #[derive(Deserialize)]
+    struct ProjectSearchResult {
+        values: Vec<JiraProject>,
+    }
+
+    let result: ProjectSearchResult = response.json().await?;
+    Ok(result.values)
+}
+
+pub fn display_projects(projects: &[JiraProject]) {
+    use colored::Colorize;
+    use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, Table};
+
+    if projects.is_empty() {
+        println!("No projects found");
+        return;
+    }
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec![
+            Cell::new("Key").fg(Color::Cyan),
+            Cell::new("Name").fg(Color::White),
+            Cell::new("Type").fg(Color::Magenta),
+            Cell::new("Lead").fg(Color::Green),
+        ]);
+
+    for project in projects {
+        let project_type = project
+            .project_type_key
+            .as_deref()
+            .unwrap_or("-");
+        let lead = project
+            .lead
+            .as_ref()
+            .map(|l| l.display_name.as_str())
+            .unwrap_or("-");
+
+        table.add_row(vec![
+            Cell::new(&project.key).fg(Color::Cyan),
+            Cell::new(&project.name).fg(Color::White),
+            Cell::new(project_type).fg(Color::Magenta),
+            Cell::new(lead).fg(Color::Green),
+        ]);
+    }
+
+    println!();
+    println!("{}", format!("Found {} projects", projects.len()).dimmed());
+    println!("{table}");
+    println!();
+}
+
+pub fn display_project(project: &JiraProject) {
+    use colored::Colorize;
+
+    println!();
+    println!(
+        "  {}  {}",
+        project.key.cyan().bold(),
+        project.name.white().bold()
+    );
+    println!("  {}", "─".repeat(50).dimmed());
+
+    if let Some(desc) = &project.description {
+        let clean_desc = strip_html(desc);
+        if !clean_desc.trim().is_empty() {
+            println!();
+            for line in clean_desc.lines() {
+                println!("  {}", line.dimmed());
+            }
+        }
+    }
+
+    println!();
+
+    if let Some(lead) = &project.lead {
+        println!(
+            "  {} {}",
+            "Lead:".yellow(),
+            lead.display_name.white()
+        );
+    }
+
+    if let Some(project_type) = &project.project_type_key {
+        let type_display = match project_type.as_str() {
+            "software" => "Software".magenta(),
+            "business" => "Business".blue(),
+            "service_desk" => "Service Desk".green(),
+            _ => project_type.white(),
+        };
+        println!("  {} {}", "Type:".yellow(), type_display);
+    }
+
+    if let Some(style) = &project.style {
+        let style_display = match style.as_str() {
+            "next-gen" => "Team-managed".cyan(),
+            "classic" => "Company-managed".blue(),
+            _ => style.white(),
+        };
+        println!("  {} {}", "Style:".yellow(), style_display);
+    }
+
+    println!();
 }
 
 pub async fn get_issue(config: &JiraConfig, key: &str) -> Result<JiraIssue> {
