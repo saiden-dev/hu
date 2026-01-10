@@ -1,6 +1,7 @@
 mod aws;
 mod commands;
 mod config;
+mod github;
 mod jira;
 mod utils;
 
@@ -126,6 +127,13 @@ enum Commands {
         #[command(subcommand)]
         action: Option<JiraCommands>,
     },
+
+    /// GitHub operations
+    #[command(name = "gh")]
+    GitHub {
+        #[command(subcommand)]
+        action: Option<GitHubCommands>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -250,6 +258,27 @@ enum JiraCommands {
 
     /// List all projects
     Projects,
+}
+
+#[derive(Subcommand, Debug)]
+enum GitHubCommands {
+    /// Configure GitHub token
+    Setup,
+
+    /// List workflow runs (default)
+    Runs {
+        /// Repository (owner/repo), defaults to current git repo
+        #[arg(short, long)]
+        repo: Option<String>,
+
+        /// Filter by status: queued, in_progress, completed
+        #[arg(short, long)]
+        status: Option<String>,
+
+        /// Maximum results
+        #[arg(short = 'n', long, default_value = "15")]
+        max: u32,
+    },
 }
 
 fn detect_env() -> Option<Environment> {
@@ -557,6 +586,35 @@ async fn main() -> Result<()> {
                     let config = jira::load_jira_config()?;
                     let projects = jira::list_projects(&config).await?;
                     jira::display_projects(&projects);
+                    Ok(())
+                }
+            }
+        }
+
+        Commands::GitHub { action } => {
+            let action = action.unwrap_or(GitHubCommands::Runs {
+                repo: None,
+                status: None,
+                max: 15,
+            });
+            match action {
+                GitHubCommands::Setup => github::setup(),
+
+                GitHubCommands::Runs { repo, status, max } => {
+                    let config = github::load_github_config()?;
+                    let repo = repo
+                        .or_else(|| config.default_repo.clone())
+                        .or_else(github::detect_repo)
+                        .context("No repository specified. Use -r owner/repo or run from a git directory")?;
+
+                    let runs = github::get_workflow_runs(
+                        &config,
+                        &repo,
+                        status.as_deref(),
+                        max,
+                    )
+                    .await?;
+                    github::display_workflow_runs(&runs, &repo);
                     Ok(())
                 }
             }
