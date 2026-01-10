@@ -134,6 +134,25 @@ enum Commands {
         #[command(subcommand)]
         action: Option<GitHubCommands>,
     },
+
+    /// EC2 instance operations (read-only)
+    Ec2 {
+        /// Filter by Environment tag (prod, dev, stg)
+        #[arg(short, long, value_enum)]
+        env: Option<Environment>,
+
+        /// Filter by Name tag pattern
+        #[arg(short = 't', long = "tag")]
+        name_filter: Option<String>,
+
+        /// Show all instances (including unnamed/terminated)
+        #[arg(long)]
+        all: bool,
+
+        /// Show only stopped instances
+        #[arg(long)]
+        stopped: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -709,6 +728,23 @@ async fn main() -> Result<()> {
                     Ok(())
                 }
             }
+        }
+
+        Commands::Ec2 {
+            env,
+            name_filter,
+            all,
+            stopped,
+        } => {
+            let filter = aws::Ec2Filter {
+                env: env.map(|e| e.as_str().to_string()),
+                name_filter,
+                show_all: all,
+                stopped_only: stopped,
+            };
+            let instances = aws::list_instances(&settings.aws.region, &filter).await?;
+            aws::display_instances(&instances);
+            Ok(())
         }
     }
 }
