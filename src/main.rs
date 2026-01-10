@@ -145,6 +145,10 @@ enum Commands {
         #[arg(short = 't', long = "tag")]
         name_filter: Option<String>,
 
+        /// Instance number to connect to via SSM
+        #[arg(short = 'p', long = "connect")]
+        connect: Option<usize>,
+
         /// Show all instances (including unnamed/terminated)
         #[arg(long)]
         all: bool,
@@ -733,6 +737,7 @@ async fn main() -> Result<()> {
         Commands::Ec2 {
             env,
             name_filter,
+            connect,
             all,
             stopped,
         } => {
@@ -743,7 +748,12 @@ async fn main() -> Result<()> {
                 stopped_only: stopped,
             };
             let instances = aws::list_instances(&settings.aws.region, &filter).await?;
-            aws::display_instances(&instances);
+
+            if let Some(num) = connect {
+                aws::ssm_connect(&instances, num)?;
+            } else {
+                aws::display_instances(&instances);
+            }
             Ok(())
         }
     }

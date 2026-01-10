@@ -577,3 +577,43 @@ pub fn display_instances(instances: &[Ec2Instance]) {
     println!("{table}");
     println!();
 }
+
+pub fn ssm_connect(instances: &[Ec2Instance], num: usize) -> Result<()> {
+    use crate::utils::print_error;
+
+    if num == 0 || num > instances.len() {
+        print_error(&format!(
+            "Invalid instance number. Choose 1-{}",
+            instances.len()
+        ));
+        return Ok(());
+    }
+
+    let instance = &instances[num - 1];
+
+    if instance.state != "running" {
+        print_error(&format!(
+            "Instance '{}' is {} (must be running)",
+            instance.name.as_deref().unwrap_or(&instance.instance_id),
+            instance.state
+        ));
+        return Ok(());
+    }
+
+    let name = instance.name.as_deref().unwrap_or(&instance.instance_id);
+    println!(
+        "{}",
+        format!("Connecting to {} ({})...", name, instance.instance_id).dimmed()
+    );
+
+    let status = std::process::Command::new("aws")
+        .args(["ssm", "start-session", "--target", &instance.instance_id])
+        .status()
+        .context("Failed to start SSM session")?;
+
+    if !status.success() {
+        print_error("SSM session failed. Ensure the instance has SSM agent and proper IAM role.");
+    }
+
+    Ok(())
+}
