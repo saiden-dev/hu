@@ -12,13 +12,10 @@ mod identity;
 mod spawn;
 
 // Re-export commonly used items
-pub use discovery::{check_profile_capabilities, discover, list_aws_profiles, ProfileCapabilities};
-pub use ec2::{display_instances, list_instances, ssm_connect, Ec2Filter, Ec2Instance};
-pub use identity::{get_identity, whoami, IdentityInfo, IdentityType};
-pub use spawn::{
-    display_spawned_instance, get_my_public_ip, kill_instance, spawn_instance, SpawnConfig,
-    SpawnedInstance,
-};
+pub use discovery::discover;
+pub use ec2::{display_instances, list_instances, ssm_connect, Ec2Filter};
+pub use identity::whoami;
+pub use spawn::{display_spawned_instance, kill_instance, spawn_instance, SpawnConfig};
 
 use anyhow::{bail, Context, Result};
 use std::process::Command;
