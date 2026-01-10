@@ -63,7 +63,6 @@ pub struct WorkflowRunsResponse {
 #[derive(Debug, Clone)]
 pub struct ProjectWorkflowRun {
     pub run: WorkflowRun,
-    pub repo: String,
     pub repo_label: String,
 }
 
@@ -221,7 +220,6 @@ pub async fn get_project_workflow_runs(
                         .into_iter()
                         .map(|run| ProjectWorkflowRun {
                             run,
-                            repo: repo.clone(),
                             repo_label: label.clone(),
                         })
                         .collect::<Vec<_>>(),
