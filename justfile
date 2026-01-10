@@ -103,3 +103,8 @@ gh-tag-delete tag:
 gh-tag-delete-all:
     git tag -l | xargs -I{} git push origin :refs/tags/{}
     git tag -l | xargs git tag -d
+
+# Bump version and publish to crates.io
+publish *args:
+    ./scripts/bump.sh {{args}}
+    cargo publish
