@@ -48,6 +48,35 @@ src/
     http.rs            # HTTP client setup
 ```
 
+### Implementation Workflow
+
+**Never assume a command will be simple.** Always follow this order:
+
+1. **Base infrastructure first** — Create the foundation before any handler
+2. **Then subcommand handler** — One file per subcommand, using the base
+
+**For a new command module** (`hu slack`):
+```
+Step 1: src/slack/mod.rs      # Module definition
+Step 2: src/slack/types.rs    # Data structures
+Step 3: src/slack/client.rs   # API client (if needed)
+Step 4: src/slack/config.rs   # Config loading (if needed)
+Step 5: src/slack/display.rs  # Output formatting (if needed)
+Step 6: src/slack/list.rs     # First subcommand handler
+```
+
+**For a new subcommand** in existing module (`hu jira sprint`):
+```
+Step 1: src/jira/sprint.rs    # Handler file
+Step 2: Update src/jira/mod.rs and CLI enum
+```
+
+**Why base-first:**
+- Forces you to understand the API/domain before writing handlers
+- Base files are reused by all subcommands — get them right first
+- Handlers become thin and focused when infrastructure exists
+- Avoids refactoring handlers later to extract shared code
+
 ### Adding a New Command Module
 
 To add `hu slack <subcommand>`:
