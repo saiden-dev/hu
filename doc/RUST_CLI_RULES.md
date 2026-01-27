@@ -789,6 +789,45 @@ println!("Size: {}", fmt::bytes(file_size));
 println!("Found {} {}", count, fmt::pluralize("ticket"));
 ```
 
+### API Client Crates
+
+Use established client libraries instead of raw HTTP:
+
+| Service | Crate | Notes |
+|---------|-------|-------|
+| **GitHub** | `octocrab` | Typed API, extensible, 1.2k+ stars |
+| **Jira** | `gouqi` | Async, V3 API, ADF support |
+| **Slack** | `slack-rust` | SocketMode, Event API, Web API |
+| **AWS** | `aws-sdk-*` | Official SDK, one crate per service |
+
+```toml
+# API Clients
+octocrab = "0.44"
+gouqi = "0.10"
+slack-rust = "0.1"
+
+# AWS (add only what you need)
+aws-config = "1"
+aws-sdk-eks = "1"
+aws-sdk-codepipeline = "1"
+aws-sdk-ec2 = "1"
+aws-sdk-s3 = "1"
+```
+
+**AWS SDK pattern:**
+```rust
+use aws_config::BehaviorVersion;
+use aws_sdk_eks::Client as EksClient;
+
+let config = aws_config::defaults(BehaviorVersion::latest())
+    .profile_name("my-profile")
+    .load()
+    .await;
+
+let eks = EksClient::new(&config);
+let clusters = eks.list_clusters().send().await?;
+```
+
 ### Dev Dependencies
 - **insta** - Snapshot testing
 - **criterion** - Benchmarks
