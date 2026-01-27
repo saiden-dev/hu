@@ -828,6 +828,94 @@ let eks = EksClient::new(&config);
 let clusters = eks.list_clusters().send().await?;
 ```
 
+### Observability Services (Custom Wrappers)
+
+No mature Rust crates exist for **reading from** these APIs. Build thin wrappers:
+
+| Service | API Type | Approach |
+|---------|----------|----------|
+| **NewRelic** | GraphQL (NerdGraph) | `graphql_client` + `reqwest` |
+| **Sentry** | REST | `reqwest` only |
+
+```toml
+# For NewRelic (GraphQL)
+graphql_client = "0.14"
+reqwest = { version = "0.12", features = ["json"] }
+
+# For Sentry (REST) - just reqwest
+```
+
+**NewRelic (NerdGraph + NRQL):**
+```rust
+// newrelic/client.rs
+use reqwest::Client;
+
+const NERDGRAPH_URL: &str = "https://api.newrelic.com/graphql";
+
+pub struct NewRelicClient {
+    client: Client,
+    api_key: String,
+    account_id: String,
+}
+
+impl NewRelicClient {
+    pub async fn query_nrql(&self, nrql: &str) -> Result<serde_json::Value> {
+        let query = format!(r#"{{
+            actor {{
+                account(id: {}) {{
+                    nrql(query: "{}") {{ results }}
+                }}
+            }}
+        }}"#, self.account_id, nrql);
+
+        self.client
+            .post(NERDGRAPH_URL)
+            .header("API-Key", &self.api_key)
+            .json(&serde_json::json!({ "query": query }))
+            .send()
+            .await?
+            .json()
+            .await
+    }
+}
+```
+
+**Sentry (REST):**
+```rust
+// sentry/client.rs
+use reqwest::Client;
+
+const SENTRY_API: &str = "https://sentry.io/api/0";
+
+pub struct SentryClient {
+    client: Client,
+    auth_token: String,
+    org: String,
+}
+
+impl SentryClient {
+    pub async fn list_issues(&self, project: &str) -> Result<Vec<Issue>> {
+        self.client
+            .get(format!("{}/projects/{}/{}/issues/", SENTRY_API, self.org, project))
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    pub async fn get_issue(&self, issue_id: &str) -> Result<Issue> {
+        self.client
+            .get(format!("{}/issues/{}/", SENTRY_API, issue_id))
+            .bearer_auth(&self.auth_token)
+            .send()
+            .await?
+            .json()
+            .await
+    }
+}
+```
+
 ### Dev Dependencies
 - **insta** - Snapshot testing
 - **criterion** - Benchmarks
