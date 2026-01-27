@@ -836,6 +836,7 @@ No mature Rust crates exist for **reading from** these APIs. Build thin wrappers
 |---------|----------|----------|
 | **NewRelic** | GraphQL (NerdGraph) | `graphql_client` + `reqwest` |
 | **Sentry** | REST | `reqwest` only |
+| **PagerDuty** | REST | `reqwest` only |
 
 ```toml
 # For NewRelic (GraphQL)
@@ -912,6 +913,60 @@ impl SentryClient {
             .await?
             .json()
             .await
+    }
+}
+```
+
+**PagerDuty (REST):**
+```rust
+// pagerduty/client.rs
+use reqwest::Client;
+
+const PAGERDUTY_API: &str = "https://api.pagerduty.com";
+
+pub struct PagerDutyClient {
+    client: Client,
+    api_key: String,
+}
+
+impl PagerDutyClient {
+    /// Get current on-call users for schedules
+    pub async fn get_oncalls(&self, schedule_ids: Option<&[&str]>) -> Result<Vec<OnCall>> {
+        let mut req = self.client
+            .get(format!("{}/oncalls", PAGERDUTY_API))
+            .header("Authorization", format!("Token token={}", self.api_key));
+
+        if let Some(ids) = schedule_ids {
+            req = req.query(&[("schedule_ids[]", ids)]);
+        }
+
+        req.send().await?.json().await
+    }
+
+    /// List incidents by status (triggered, acknowledged, resolved)
+    pub async fn list_incidents(&self, statuses: &[&str]) -> Result<Vec<Incident>> {
+        self.client
+            .get(format!("{}/incidents", PAGERDUTY_API))
+            .header("Authorization", format!("Token token={}", self.api_key))
+            .query(&[("statuses[]", statuses)])
+            .send()
+            .await?
+            .json()
+            .await
+    }
+
+    /// Check if current user is on-call
+    pub async fn am_i_oncall(&self, user_id: &str) -> Result<bool> {
+        let oncalls: Vec<OnCall> = self.client
+            .get(format!("{}/oncalls", PAGERDUTY_API))
+            .header("Authorization", format!("Token token={}", self.api_key))
+            .query(&[("user_ids[]", user_id)])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(!oncalls.is_empty())
     }
 }
 ```
