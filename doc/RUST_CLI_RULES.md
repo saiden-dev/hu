@@ -44,9 +44,13 @@ src/
   util/
     mod.rs
     http.rs            # HTTP client setup
-    table.rs           # Table formatting helpers
     config.rs          # Config loading
     output.rs          # Output format handling (--json, --table)
+    ui/
+      mod.rs           # UI re-exports
+      table.rs         # Ratatui table helpers
+      progress.rs      # Progress bar/spinner helpers
+      status.rs        # Status badges, icons, styles
 ```
 
 ### Implementation Workflow
@@ -85,10 +89,11 @@ If implementing something that looks reusable, **start in `util/`**, not in the 
 | Feature | Put in `util/` | NOT in |
 |---------|----------------|--------|
 | `--json` / `--table` output flag | `util/output.rs` | `jira/display.rs` |
-| Colored status badges | `util/table.rs` | `gh/display.rs` |
+| Tables (ratatui) | `util/ui/table.rs` | `gh/display.rs` |
+| Colored status badges | `util/ui/status.rs` | `gh/display.rs` |
+| Progress spinners | `util/ui/progress.rs` | `jira/tickets.rs` |
 | Config file loading | `util/config.rs` | `jira/config.rs` |
 | HTTP client with retries | `util/http.rs` | `jira/client.rs` |
-| Progress spinners | `util/progress.rs` | `jira/tickets.rs` |
 | Date/time formatting | `util/time.rs` | `gh/runs.rs` |
 
 **Rule:** When in doubt, put it in `util/`. Moving from `util/` to module-specific is easy; extracting from module to `util/` later is a refactor.
@@ -717,19 +722,115 @@ cargo insta review  # review snapshot changes
 
 ### Core Crates
 - **clap** (derive) - CLI parsing
-- **colored** - Terminal colors
-- **comfy-table** - Table display
-- **indicatif** - Progress spinners
+- **ratatui** - Terminal UI (tables, progress, colors, layouts)
+- **crossterm** - Terminal backend for ratatui
 - **anyhow** - Application errors
 - **thiserror** - Library errors
 - **serde** + **serde_json** - Serialization
-- **tokio** - Async runtime (if needed)
+- **tokio** - Async runtime
 - **tracing** - Structured logging
 
 ### Dev Dependencies
 - **insta** - Snapshot testing
 - **criterion** - Benchmarks
 - **tempfile** - Test fixtures
+
+### UI with Ratatui
+
+Ratatui provides unified UI components. Put wrappers in `util/ui/`:
+
+```
+util/
+  ui/
+    mod.rs           # Re-exports
+    table.rs         # Table helpers
+    progress.rs      # Progress bar/spinner helpers
+    status.rs        # Status badges, icons
+    prompt.rs        # User prompts (pair with dialoguer)
+```
+
+**Table pattern:**
+```rust
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Borders, Table, Row, Cell},
+};
+
+pub fn tickets_table(tickets: &[Ticket]) -> Table<'_> {
+    let header = Row::new(vec!["Key", "Summary", "Status"])
+        .style(Style::default().bold());
+
+    let rows = tickets.iter().map(|t| {
+        Row::new(vec![
+            Cell::from(t.key.as_str()),
+            Cell::from(t.summary.as_str()),
+            Cell::from(t.status.as_str()).style(status_style(&t.status)),
+        ])
+    });
+
+    Table::new(rows, [Constraint::Length(12), Constraint::Min(30), Constraint::Length(15)])
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title("Tickets"))
+}
+```
+
+**Progress pattern:**
+```rust
+use ratatui::widgets::{Gauge, Block, Borders};
+
+pub fn progress_gauge(percent: u16, label: &str) -> Gauge<'_> {
+    Gauge::default()
+        .block(Block::default().borders(Borders::ALL).title(label))
+        .gauge_style(Style::default().fg(Color::Cyan))
+        .percent(percent)
+}
+```
+
+**Status badge pattern:**
+```rust
+pub fn status_style(status: &str) -> Style {
+    match status {
+        "success" | "done" => Style::default().fg(Color::Green),
+        "failure" | "error" => Style::default().fg(Color::Red),
+        "pending" | "in_progress" => Style::default().fg(Color::Yellow),
+        _ => Style::default(),
+    }
+}
+
+pub fn status_icon(status: &str) -> &'static str {
+    match status {
+        "success" | "done" => "✓",
+        "failure" | "error" => "✗",
+        "pending" => "○",
+        "in_progress" => "◐",
+        _ => "•",
+    }
+}
+```
+
+**Simple output (non-interactive):**
+```rust
+use std::io::{self, stdout};
+use ratatui::{prelude::*, Terminal};
+use crossterm::{execute, terminal::*};
+
+pub fn print_table(table: Table) -> io::Result<()> {
+    // For non-interactive output, render once to stdout
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    terminal.draw(|frame| {
+        frame.render_widget(table, frame.area());
+    })?;
+    Ok(())
+}
+```
+
+**When to use ratatui vs plain print:**
+| Use ratatui | Use `println!` |
+|-------------|----------------|
+| Tables | Simple single-line output |
+| Progress bars | Error messages |
+| Colored status | Debug info |
+| Interactive TUI | JSON output (`--json`) |
 
 ---
 
