@@ -8,8 +8,8 @@ pub enum GhCommand {
     Prs,
     /// List workflow runs
     Runs,
-    /// Show CI failures
-    Failures,
+    /// Extract test failures from CI
+    Failures(FailuresArgs),
     /// Check CI status
     Ci,
 }
@@ -19,4 +19,14 @@ pub struct LoginArgs {
     /// Personal Access Token (create at https://github.com/settings/tokens)
     #[arg(long, short)]
     pub token: String,
+}
+
+#[derive(Debug, Args)]
+pub struct FailuresArgs {
+    /// PR number (defaults to current branch's PR)
+    #[arg(long)]
+    pub pr: Option<u64>,
+    /// Repository in owner/repo format (defaults to current directory's repo)
+    #[arg(long, short)]
+    pub repo: Option<String>,
 }

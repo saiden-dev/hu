@@ -24,6 +24,15 @@ pub struct PullRequest {
     pub ci_status: Option<CiStatus>,
 }
 
+/// A test failure extracted from CI logs
+#[derive(Debug, Clone)]
+pub struct TestFailure {
+    /// The spec file path (e.g., "spec/models/user_spec.rb")
+    pub spec_file: String,
+    /// The failure message/output
+    pub failure_text: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

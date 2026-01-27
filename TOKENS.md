@@ -313,3 +313,95 @@ hu code structure <file>           # AST outline
 | `code definition` | High | 3-5x | 4 |
 
 The first two are quick wins - minimal implementation, massive savings.
+
+---
+
+## Agent Tools vs Hooks
+
+Not all token-saving features should be agent-invoked. Some should run automatically.
+
+### Best as Agent Tools
+
+Agent decides when/how to use:
+
+| Tool | Why Agent-Controlled |
+|------|---------------------|
+| `fetch-html --content/--links` | Agent chooses URL and extraction mode |
+| `grep --refs/--signature` | Agent crafts pattern, decides detail level |
+| `read --outline/--around` | Agent picks file and what view it needs |
+| `docs section` | Agent decides which section to extract |
+| `code definition/references` | Agent chooses symbol to investigate |
+
+### Best as Hooks
+
+Transparent, automatic - agent shouldn't think about them:
+
+| Hook Trigger | Action | Why Automatic |
+|--------------|--------|---------------|
+| **Pre-Read** | Check if file already in context | Agent shouldn't track this manually |
+| **Pre-Read** | Auto-truncate files >500 lines | Prevent accidental token bombs |
+| **Pre-Grep** | Limit results to 20 matches | Prevent runaway searches |
+| **Post-Fetch** | Strip scripts/styles automatically | Always wanted, never skip |
+| **Session-Start** | Build/update code index | Ready before agent needs it |
+| **Session-End** | Clear context tracking, cleanup | Maintenance |
+| **Pre-Tool** | Warn if operation exceeds token budget | Guard rails |
+
+### Hybrid: Hook + Tool Override
+
+Some features work as hooks with agent override:
+
+```bash
+# Hook auto-strips HTML junk, but agent can bypass:
+hu utils fetch-html <url> --raw
+
+# Hook auto-limits grep to 20, but agent can bypass:
+hu grep <pattern> --no-limit
+```
+
+---
+
+## Session History Files (.jsonl)
+
+Claude Code stores session data in `.jsonl` files under `~/.claude/projects/`.
+
+### What's Stored
+
+Each session file contains:
+- Session ID, project path, timestamps
+- All messages (user + assistant)
+- Tool calls and results
+- Token counts
+- Model used
+
+### Primary Uses
+
+| Purpose | Description |
+|---------|-------------|
+| `--continue` / `--resume` | Resume previous sessions |
+| `hu data sessions` | List/read past sessions |
+| `hu data search` | Search through message history |
+| `hu data stats` | Usage analytics (tokens, costs) |
+| `hu data tools` | Tool usage statistics |
+| Hook context injection | Hooks query these for "similar past work" |
+
+### The Token Waste Problem
+
+The files themselves aren't loaded into Claude's context, but:
+
+1. **Hooks query them** → extract "relevant" history → inject into context
+2. **More sessions = slower searches** = more latency
+3. **815+ files** across todos and sessions = significant I/O
+
+### Optimization
+
+```bash
+# Index into SQLite (faster queries than raw .jsonl)
+hu data sync
+
+# Prune old sessions
+hu data sessions --prune --keep 100
+
+# Or archive raw .jsonl files older than 30 days
+```
+
+If not using `--continue` or search/analytics, raw `.jsonl` files can be archived aggressively. The SQLite DB is more efficient for queries.
