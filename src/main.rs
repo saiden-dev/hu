@@ -85,5 +85,33 @@ fn print_subcommand_help(name: &str) -> anyhow::Result<()> {
             return Ok(());
         }
     }
-    Ok(())
+    unreachable!("unknown subcommand: {}", name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_no_args() {
+        let cli = Cli::try_parse_from::<[&str; 0], &str>([]).unwrap();
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn parses_subcommand_without_action() {
+        let cli = Cli::try_parse_from(["hu", "jira"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Jira { cmd: None })));
+    }
+
+    #[test]
+    fn parses_command_aliases() {
+        // pd -> pagerduty
+        let cli = Cli::try_parse_from(["hu", "pd", "oncall"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::PagerDuty { .. })));
+
+        // nr -> newrelic
+        let cli = Cli::try_parse_from(["hu", "nr", "incidents"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::NewRelic { .. })));
+    }
 }
