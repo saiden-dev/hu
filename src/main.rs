@@ -9,14 +9,16 @@ mod newrelic;
 mod pagerduty;
 mod sentry;
 mod slack;
+mod util;
 
 use cli::{Cli, Command};
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(cmd) => run_command(cmd),
+        Some(cmd) => run_command(cmd).await,
         None => {
             Cli::command().print_help()?;
             println!();
@@ -25,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn run_command(cmd: Command) -> anyhow::Result<()> {
+async fn run_command(cmd: Command) -> anyhow::Result<()> {
     match cmd {
         Command::Dashboard { cmd } => {
             println!("dashboard: {:?}", cmd);
@@ -37,7 +39,7 @@ fn run_command(cmd: Command) -> anyhow::Result<()> {
             print_subcommand_help("jira")?;
         }
         Command::Gh { cmd: Some(cmd) } => {
-            println!("gh: {:?}", cmd);
+            return gh::run_command(cmd).await;
         }
         Command::Gh { cmd: None } => {
             print_subcommand_help("gh")?;

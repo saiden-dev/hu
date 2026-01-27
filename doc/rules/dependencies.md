@@ -330,6 +330,99 @@ impl PagerDutyClient {
 }
 ```
 
+## CLI Authentication Strategies
+
+### OAuth Device Flow (Best UX)
+User sees code, opens browser, enters code. No localhost server needed.
+
+```rust
+// Supported by: GitHub
+// Flow:
+// 1. POST to device/code endpoint → get user_code + device_code
+// 2. Display: "Enter code ABCD-1234 at https://github.com/login/device"
+// 3. Poll token endpoint until user completes auth
+// 4. Store token in config_dir()/credentials.toml
+```
+
+**GitHub Device Flow:**
+```rust
+const DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
+const TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+// Requires OAuth App client_id (no client_secret needed for device flow)
+```
+
+### OAuth with Localhost Redirect
+Spin up temporary local server to catch redirect.
+
+```rust
+// Supported by: Jira, Slack, Sentry, PagerDuty
+// Flow:
+// 1. Start localhost:PORT server
+// 2. Open browser to auth URL with redirect_uri=http://localhost:PORT/callback
+// 3. User authorizes, browser redirects to localhost with code
+// 4. Exchange code for token
+// 5. Shutdown server
+```
+
+**Jira OAuth 2.0 3LO:**
+```rust
+const AUTH_URL: &str = "https://auth.atlassian.com/authorize";
+const TOKEN_URL: &str = "https://auth.atlassian.com/oauth/token";
+// Requires: client_id, client_secret, redirect_uri
+// Scopes: read:jira-work, read:jira-user, etc.
+```
+
+### API Keys (Simplest)
+User creates key in web UI, pastes into CLI.
+
+```rust
+// Supported by: NewRelic, Sentry, PagerDuty
+// Flow:
+// 1. Prompt: "Enter API key (create at https://...):"
+// 2. Store in config_dir()/credentials.toml
+```
+
+### AWS SSO
+Uses IAM Identity Center, not OAuth.
+
+```rust
+// Flow: Shell out to AWS CLI
+// $ aws sso login --profile my-profile
+// Or use aws-config crate with SsoCredentialsProvider
+```
+
+### Credential Storage
+
+```rust
+use directories::ProjectDirs;
+
+// Store in: ~/.config/hu/credentials.toml
+// Format:
+// [github]
+// token = "ghp_xxx"
+//
+// [jira]
+// access_token = "xxx"
+// refresh_token = "xxx"
+// expires_at = 1234567890
+//
+// [newrelic]
+// api_key = "NRAK-xxx"
+
+// NEVER store in plain text in repo or logs
+// Consider: keyring crate for OS keychain integration
+```
+
+| Service | Auth Method | Crate |
+|---------|-------------|-------|
+| GitHub | Device Flow | `octocrab` + custom |
+| Jira | OAuth 2.0 3LO | `oauth2` |
+| Slack | OAuth 2.0 | `oauth2` |
+| PagerDuty | API Key | - |
+| Sentry | API Token | - |
+| NewRelic | API Key | - |
+| AWS | SSO | `aws-config` |
+
 ## Dev Dependencies
 
 - **insta** - Snapshot testing

@@ -2,7 +2,9 @@ use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
 pub enum GhCommand {
-    /// List pull requests
+    /// Authenticate with GitHub via OAuth Device Flow
+    Login,
+    /// List open pull requests authored by you
     Prs,
     /// List workflow runs
     Runs,
