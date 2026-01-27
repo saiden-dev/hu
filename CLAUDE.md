@@ -18,7 +18,21 @@ Rules split by topic:
 1. **Never assume simple** — always follow base-first approach
 2. **Base infrastructure first** → then subcommand handlers
 3. **util/ first** for anything reusable (don't implement in module)
-4. **Ask before adding deps** — present choices to user
+
+### Present Interactive Choices For:
+- **Adding dependencies** — show options with trade-offs
+- **Architecture decisions** — multiple valid approaches
+- **Config format** — TOML vs JSON vs YAML
+- **API design** — when multiple patterns fit
+- **Breaking changes** — confirm before modifying public API
+
+Example:
+```
+Which HTTP client approach?
+1. reqwest (recommended) - full-featured, async
+2. ureq - blocking, minimal deps
+3. Custom with hyper - more control
+```
 
 ### Architecture
 - **Interface-agnostic logic**: Services return data, cli/api format it

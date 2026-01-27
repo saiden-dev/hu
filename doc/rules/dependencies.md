@@ -66,6 +66,30 @@
 - **serde** + **serde_json** - Serialization
 - **tokio** - Async runtime
 - **tracing** - Structured logging
+- **directories** - XDG config/data/cache paths (cross-platform)
+
+### Config Paths with `directories`
+
+```rust
+use directories::ProjectDirs;
+
+pub fn project_dirs() -> Option<ProjectDirs> {
+    ProjectDirs::from("", "", "hu")
+}
+
+// Usage:
+let dirs = project_dirs().expect("no home directory");
+let config_path = dirs.config_dir().join("config.toml");
+// Linux: ~/.config/hu/config.toml
+// macOS: ~/Library/Application Support/hu/config.toml
+```
+
+**Standard paths for `hu`:**
+| Purpose | Method | Linux | macOS |
+|---------|--------|-------|-------|
+| Config | `config_dir()` | `~/.config/hu/` | `~/Library/Application Support/hu/` |
+| Data | `data_dir()` | `~/.local/share/hu/` | `~/Library/Application Support/hu/` |
+| Cache | `cache_dir()` | `~/.cache/hu/` | `~/Library/Caches/hu/` |
 
 ## Humanization Crates (ActiveSupport-like)
 
