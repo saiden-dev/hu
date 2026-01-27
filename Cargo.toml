@@ -1,67 +1,19 @@
 [package]
 name = "hu"
-version = "0.1.0-pre21"
+version = "0.1.0"
 edition = "2021"
-authors = ["Chi"]
-description = "Dev workflow CLI: EKS pods, Jira tickets, GitHub PRs, AWS pipelines"
+description = "Dev workflow CLI"
 license = "MIT"
-repository = "https://github.com/chi/hu"
-keywords = ["kubernetes", "eks", "aws", "cli", "devops"]
-categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "hu"
+path = "src/main.rs"
 
 [dependencies]
-# CLI framework
-clap = { version = "4", features = ["derive", "color", "suggestions", "wrap_help"] }
-
-# Pretty terminal output
-colored = "2"
-console = "0.15"
-indicatif = "0.17"
-comfy-table = "7"
-
-# Async runtime for parallel log tailing
-tokio = { version = "1", features = ["full"] }
-futures = "0.3"
-
-# Error handling
-anyhow = "1"
-thiserror = "1"
-
-# AWS SDK
-aws-config = "1"
-aws-sdk-sts = "1"
-aws-sdk-eks = "1"
-aws-sdk-iam = "1"
-aws-sdk-s3 = "1"
-aws-sdk-ec2 = "1"
-aws-sdk-codepipeline = "1"
-
-# Serialization (for kubeconfig and IAM policies)
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
-toml = "0.8"
-urlencoding = "2"
-
-# Directories
-dirs = "5"
-
-# Encoding
-base64 = "0.22"
-
-# Signal handling
-ctrlc = "3"
-
-# OAuth 2.0 / Jira
-oauth2 = "4"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-open = "5"
-url = "2"
+clap = { version = "4.5", features = ["derive", "color", "wrap_help"] }
+anyhow = "1.0"
 
 [dev-dependencies]
-assert_cmd = "2"
-predicates = "3"
-tempfile = "3"
 
 [profile.release]
 lto = true

@@ -3,108 +3,43 @@
 default:
     @just --list
 
-# Development
+# Build debug
 build:
     cargo build
 
+# Run with args
 run *args:
     cargo run -- {{args}}
 
+# Run tests
 test:
     cargo test
 
-lint:
-    cargo clippy -- -D warnings
-    cargo fmt --check
-
+# Format code
 fmt:
     cargo fmt
 
-# Alias for consistency
-check: lint
-
+# Lint with clippy
 clippy:
     cargo clippy -- -D warnings
 
-# Release
+# Run all checks (fmt + clippy)
+check:
+    cargo fmt --check
+    cargo clippy -- -D warnings
+
+# Build release
 release:
     cargo build --release
 
+# Install locally
 install:
     cargo install --path .
-
-# Version bumping
-# Usage: just bump [patch|minor]
-# - No args: bump pre-release number (0.1.0-pre1 -> 0.1.0-pre2)
-# - patch: bump patch version (0.1.0-pre1 -> 0.1.1-pre1, or 0.1.0 -> 0.1.1)
-# - minor: bump minor version (0.1.0 -> 0.2.0, or 0.1.0-pre1 -> 0.2.0-pre1)
-bump *args:
-    ./scripts/bump.sh {{args}}
 
 # Clean
 clean:
     cargo clean
 
-# CI tasks
-ci-fmt:
-    cargo fmt
-
-ci-lint-fix:
-    cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
-
-ci-lint-check:
-    cargo clippy -- -D warnings
-
-ci-test:
-    cargo test --verbose
-
-ci-build target:
-    cargo build --release --target {{target}}
-
-ci-install-cross-deps target:
-    ./scripts/install-cross-deps.sh {{target}}
-
-ci-package target version:
-    ./scripts/package.sh {{target}} {{version}}
-
-ci-is-prerelease tag:
-    @./scripts/is-prerelease.sh {{tag}}
-
-ci-verify-version tag:
-    ./scripts/verify-version.sh {{tag}}
-
-ci-publish:
-    cargo publish --token $CRATES_API_KEY
-
-# Full release prep
-dist: lint test release
-    @echo "Release ready in target/release/"
-    @ls -lh target/release/hu
-
-# Watch for changes and rebuild
-watch:
-    cargo watch -x build
-
-# GitHub Actions
-# Clear failed workflow runs
-gh-clear:
-    gh run list --status failure --limit 1000 --json databaseId -q '.[].databaseId' | xargs -I{} gh run delete {}
-
-# Clear all workflow runs
-gh-clear-all:
-    gh run list --limit 1000 --json databaseId -q '.[].databaseId' | xargs -I{} gh run delete {}
-
-# Delete a remote tag
-gh-tag-delete tag:
-    git push origin :refs/tags/{{tag}}
-    git tag -d {{tag}} 2>/dev/null || true
-
-# Delete ALL remote tags (use with caution!)
-gh-tag-delete-all:
-    git tag -l | xargs -I{} git push origin :refs/tags/{}
-    git tag -l | xargs git tag -d
-
-# Bump version and publish to crates.io
-publish *args:
-    ./scripts/bump.sh {{args}}
-    cargo publish
+# Full check before commit
+pre-commit: check test
+    @echo "All checks passed"
