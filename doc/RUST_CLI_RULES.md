@@ -78,6 +78,21 @@ Step 2: Update src/jira/mod.rs and CLI enum
 - Handlers become thin and focused when infrastructure exists
 - Avoids refactoring handlers later to extract shared code
 
+**Reusable patterns → `util/` first:**
+
+If implementing something that looks reusable, **start in `util/`**, not in the command module:
+
+| Feature | Put in `util/` | NOT in |
+|---------|----------------|--------|
+| `--json` / `--table` output flag | `util/output.rs` | `jira/display.rs` |
+| Colored status badges | `util/table.rs` | `gh/display.rs` |
+| Config file loading | `util/config.rs` | `jira/config.rs` |
+| HTTP client with retries | `util/http.rs` | `jira/client.rs` |
+| Progress spinners | `util/progress.rs` | `jira/tickets.rs` |
+| Date/time formatting | `util/time.rs` | `gh/runs.rs` |
+
+**Rule:** When in doubt, put it in `util/`. Moving from `util/` to module-specific is easy; extracting from module to `util/` later is a refactor.
+
 ### Adding a New Command Module
 
 To add `hu slack <subcommand>`:
