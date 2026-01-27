@@ -32,11 +32,13 @@
 - [ ] Common patterns extracted to helpers
 
 ### Testing
+- [ ] **100% coverage** (`cargo tarpaulin`)
 - [ ] Code is testable (logic separated from I/O)
 - [ ] External deps use traits (mockable)
 - [ ] Unit tests inline with `#[cfg(test)]` modules
-- [ ] Integration tests in `tests/` directory
-- [ ] No "hard to test" code accepted
+- [ ] Integration tests in `tests/` for binary behavior
+- [ ] CLI: help exits 0, outputs to stdout
+- [ ] No dead code — use `unreachable!()` for impossible paths
 
 ### Tooling
 - [ ] `clippy.toml` and `rustfmt.toml` configured

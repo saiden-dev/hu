@@ -1,5 +1,12 @@
 # Testing
 
+## Coverage Requirement
+
+**100% test coverage required.** Run `cargo tarpaulin` to verify.
+
+- Mark unreachable code with `unreachable!()` — don't leave dead `Ok(())`
+- Every code path must be exercised by tests
+
 ## Write Testable Code
 
 **"Hard to test" or "impossible to test" is not acceptable.** Design for testability from the start.
@@ -174,10 +181,46 @@ benches/
 2. Add tests for functions being extracted
 3. Consider property-based tests for parsing
 
+## CLI Integration Tests
+
+For CLI apps, test actual binary behavior with `std::process::Command`:
+
+```rust
+// tests/cli.rs
+use std::process::Command;
+
+fn hu() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_hu"))
+}
+
+#[test]
+fn no_args_shows_help_exits_zero() {
+    let output = hu().output().expect("failed to execute");
+    assert!(output.status.success());  // exit 0, not 2
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Usage:"));  // stdout, not stderr
+}
+
+#[test]
+fn subcommand_runs() {
+    let output = hu()
+        .args(["jira", "tickets"])
+        .output()
+        .expect("failed to execute");
+    assert!(output.status.success());
+}
+```
+
+**CLI behavior rules:**
+- Help on no args/subcommand → **exit 0**, output to **stdout**
+- Invalid command → exit non-zero
+- Test all command paths for 100% coverage
+
 ## Test Commands
 
 ```bash
 just check      # fmt + clippy
 just test       # run all tests
+cargo tarpaulin # coverage (must be 100%)
 cargo insta review  # review snapshot changes
 ```

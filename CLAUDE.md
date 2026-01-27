@@ -55,11 +55,34 @@ src/
 - All types: `#[derive(Debug)]`
 
 ### Testing (Critical)
+- **100% coverage required** — run `cargo tarpaulin`
 - **"Hard to test" is NOT acceptable** — design for testability
 - **Separate logic from I/O** — test logic, mock boundaries
 - **Traits for external deps** — mockable
-- **Unit tests**: inline `#[cfg(test)]` (can test private)
-- **Integration tests**: `tests/` directory
+
+**Test locations (Rust idiom):**
+- **Unit tests**: inline `#[cfg(test)]` — parsing logic, internal functions
+- **Integration tests**: `tests/` — binary behavior via `std::process::Command`
+
+**CLI integration tests pattern:**
+```rust
+// tests/cli.rs
+fn hu() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_hu"))
+}
+
+#[test]
+fn subcommand_shows_help() {
+    let output = hu().arg("jira").output().unwrap();
+    assert!(output.status.success());  // exit 0, not 2
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Jira operations"));  // stdout, not stderr
+}
+```
+
+**CLI behavior rules:**
+- Help on no args/subcommand → exit 0, stdout (not stderr)
+- Mark unreachable code with `unreachable!()` (don't leave dead `Ok(())`)
 
 ### Output (Pretty by Default)
 - **ratatui** for tables, progress, status
