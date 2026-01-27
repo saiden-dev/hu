@@ -40,12 +40,13 @@ src/
     types.rs
     client.rs
 
-  # Shared utilities
-  shared/
+  # Utilities (name by purpose, not "shared")
+  util/
     mod.rs
+    http.rs            # HTTP client setup
     table.rs           # Table formatting helpers
     config.rs          # Config loading
-    http.rs            # HTTP client setup
+    output.rs          # Output format handling (--json, --table)
 ```
 
 ### Implementation Workflow
@@ -143,9 +144,9 @@ Command::Slack { cmd } => cmd.run().await,
 
 ### Module Isolation Rules
 - Each command module owns its CLI definition, types, and handlers
-- Modules only import from `shared/` and standard library
+- Modules only import from `util/` and standard library
 - No cross-imports between command modules (jira/ never imports from gh/)
-- If two modules need the same code, extract to `shared/`
+- If two modules need the same code, extract to `util/`
 
 ### Internal Module Structure
 Separate base infrastructure from subcommand handlers:
