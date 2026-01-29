@@ -1,0 +1,42 @@
+{
+  "$schema": "https://claude.ai/code/settings.schema.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pre-read.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pre-grep.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/session-start.sh"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "type": "command",
+        "command": "~/.claude/hooks/session-end.sh"
+      }
+    ]
+  },
+  "env": {
+    "HU_MAX_FILE_LINES": "500",
+    "HU_MAX_GREP_RESULTS": "20",
+    "HU_CLEANUP_DAYS": "7"
+  }
+}
