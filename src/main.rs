@@ -34,7 +34,7 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
             println!("dashboard: {:?}", cmd);
         }
         Command::Jira { cmd: Some(cmd) } => {
-            println!("jira: {:?}", cmd);
+            return jira::run_command(cmd).await;
         }
         Command::Jira { cmd: None } => {
             print_subcommand_help("jira")?;
