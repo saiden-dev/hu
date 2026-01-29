@@ -1,5 +1,4 @@
 {
-  "$schema": "https://claude.ai/code/settings.schema.json",
   "hooks": {
     "PreToolUse": [
       {
