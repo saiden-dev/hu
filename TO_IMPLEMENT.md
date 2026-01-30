@@ -39,6 +39,10 @@ Commands for Claude Code session data analysis.
 | `hu jira analyze <ticket>` | Analyze ticket and investigate related code |
 | `hu jira branch <ticket>` | Create git branch from ticket |
 | `hu jira status` | Generate daily status report |
+| `hu jira config` | Show Jira configuration |
+| `hu jira check` | Check sprint tickets without descriptions |
+| `hu jira open <ticket>` | Open ticket in browser |
+| `hu jira prs <ticket>` | Show PRs linked to a ticket |
 
 ## Priority 4: Settings Management
 
@@ -65,6 +69,7 @@ Commands for Claude Code session data analysis.
 | `hu disk known` | Scan known space hogs |
 | `hu disk list-known` | List known hog definitions |
 | `hu disk inventory` | Full disk space analysis |
+| `hu disk asdf` | Show ASDF version manager breakdown |
 
 ## Priority 6: Services (macOS)
 
@@ -109,6 +114,17 @@ Commands for Claude Code session data analysis.
 | Command | Description |
 |---------|-------------|
 | `hu plugin create` | Create a Claude Code plugin |
+
+## Priority 8: Code Analysis
+
+### hu code
+| Command | Description |
+|---------|-------------|
+| `hu code analyze` | Analyze code structure (imports, exports, definitions) |
+| `hu code imports` | List imports in a file |
+| `hu code defs` | List function/class definitions |
+| `hu code exports` | List exports from a file |
+| `hu code langs` | Detect languages in codebase |
 
 ## Currently Working
 
