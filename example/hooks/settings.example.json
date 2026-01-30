@@ -22,14 +22,22 @@
     ],
     "SessionStart": [
       {
-        "type": "command",
-        "command": "~/.claude/hooks/session-start.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/session-start.sh"
+          }
+        ]
       }
     ],
     "SessionEnd": [
       {
-        "type": "command",
-        "command": "~/.claude/hooks/session-end.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/session-end.sh"
+          }
+        ]
       }
     ]
   },
