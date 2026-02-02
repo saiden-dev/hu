@@ -289,9 +289,10 @@ mod tests {
 
     #[test]
     fn format_tickets_handles_long_summary() {
+        // Summary must be >200 chars to ensure truncation even on wide terminals
         let issues = vec![Issue {
             key: "LONG-123".to_string(),
-            summary: "This is a very long summary that should be truncated to fit within the terminal width appropriately".to_string(),
+            summary: "A".repeat(250),
             status: "Open".to_string(),
             issue_type: "Story".to_string(),
             assignee: Some("A Very Long Username".to_string()),
