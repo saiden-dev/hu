@@ -472,4 +472,184 @@ mod tests {
         let result = output_incident_detail(&incident, OutputFormat::Json);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn output_user_table_format() {
+        use super::super::types::User;
+
+        let user = User {
+            id: "U1".to_string(),
+            name: Some("Alice Smith".to_string()),
+            summary: None,
+            email: "alice@example.com".to_string(),
+            html_url: "https://pagerduty.com/users/U1".to_string(),
+        };
+
+        let result = output_user(&user, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_user_json_format() {
+        use super::super::types::User;
+
+        let user = User {
+            id: "U1".to_string(),
+            name: Some("Alice Smith".to_string()),
+            summary: None,
+            email: "alice@example.com".to_string(),
+            html_url: "https://pagerduty.com/users/U1".to_string(),
+        };
+
+        let result = output_user(&user, OutputFormat::Json);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_user_empty_email() {
+        use super::super::types::User;
+
+        let user = User {
+            id: "U1".to_string(),
+            name: Some("Alice".to_string()),
+            summary: None,
+            email: String::new(),
+            html_url: String::new(),
+        };
+
+        let result = output_user(&user, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_oncalls_without_schedule() {
+        use super::super::types::{EscalationPolicy, User};
+
+        let oncalls = vec![Oncall {
+            user: User {
+                id: "U1".to_string(),
+                name: Some("Alice".to_string()),
+                summary: None,
+                email: "alice@example.com".to_string(),
+                html_url: String::new(),
+            },
+            schedule: None,
+            escalation_policy: EscalationPolicy {
+                id: "EP1".to_string(),
+                name: "Primary".to_string(),
+                html_url: String::new(),
+            },
+            escalation_level: 1,
+            start: None,
+            end: None,
+        }];
+
+        let result = output_oncalls(&oncalls, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_oncalls_json_with_data() {
+        use super::super::types::{EscalationPolicy, Schedule, User};
+
+        let oncalls = vec![Oncall {
+            user: User {
+                id: "U1".to_string(),
+                name: Some("Alice".to_string()),
+                summary: None,
+                email: "alice@example.com".to_string(),
+                html_url: String::new(),
+            },
+            schedule: Some(Schedule {
+                id: "S1".to_string(),
+                name: "Weekly".to_string(),
+                html_url: String::new(),
+            }),
+            escalation_policy: EscalationPolicy {
+                id: "EP1".to_string(),
+                name: "Primary".to_string(),
+                html_url: String::new(),
+            },
+            escalation_level: 1,
+            start: None,
+            end: None,
+        }];
+
+        let result = output_oncalls(&oncalls, OutputFormat::Json);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_incidents_json_with_data() {
+        use super::super::types::{Service, Urgency};
+
+        let incidents = vec![Incident {
+            id: "INC1".to_string(),
+            incident_number: 42,
+            title: "Test incident".to_string(),
+            status: IncidentStatus::Acknowledged,
+            urgency: Urgency::Low,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            html_url: String::new(),
+            service: Service {
+                id: "S1".to_string(),
+                name: "Production".to_string(),
+                status: "active".to_string(),
+                html_url: String::new(),
+            },
+            assignments: vec![],
+        }];
+
+        let result = output_incidents(&incidents, OutputFormat::Json);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn output_incident_detail_no_url() {
+        use super::super::types::{Service, Urgency};
+
+        let incident = Incident {
+            id: "INC1".to_string(),
+            incident_number: 42,
+            title: "Server down".to_string(),
+            status: IncidentStatus::Resolved,
+            urgency: Urgency::High,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            html_url: String::new(),
+            service: Service {
+                id: "S1".to_string(),
+                name: "Production".to_string(),
+                status: "active".to_string(),
+                html_url: String::new(),
+            },
+            assignments: vec![],
+        };
+
+        let result = output_incident_detail(&incident, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn truncate_zero_max() {
+        // Edge case: max_len = 0
+        assert_eq!(truncate("hello", 0), "...");
+    }
+
+    #[test]
+    fn time_ago_boundary_cases() {
+        // Exactly 1 day ago
+        let dt = chrono::Utc::now() - chrono::Duration::days(1);
+        let timestamp = dt.to_rfc3339();
+        assert_eq!(time_ago(&timestamp), "1d ago");
+
+        // Exactly 1 hour ago
+        let dt = chrono::Utc::now() - chrono::Duration::hours(1);
+        let timestamp = dt.to_rfc3339();
+        assert_eq!(time_ago(&timestamp), "1h ago");
+
+        // Exactly 1 minute ago
+        let dt = chrono::Utc::now() - chrono::Duration::minutes(1);
+        let timestamp = dt.to_rfc3339();
+        assert_eq!(time_ago(&timestamp), "1m ago");
+    }
 }

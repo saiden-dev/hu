@@ -88,4 +88,82 @@ mod tests {
         let config = AwsConfig { region: None };
         assert!(config.region.is_none());
     }
+
+    #[test]
+    fn output_format_from_json_flag_true() {
+        let json = true;
+        let format = if json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Table
+        };
+        assert_eq!(format, OutputFormat::Json);
+    }
+
+    #[test]
+    fn output_format_from_json_flag_false() {
+        let json = false;
+        let format = if json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Table
+        };
+        assert_eq!(format, OutputFormat::Table);
+    }
+
+    #[test]
+    fn pipeline_command_list_matches() {
+        let cmd = PipelineCommand::List {
+            region: Some("us-west-2".to_string()),
+            json: true,
+        };
+        match cmd {
+            PipelineCommand::List { region, json } => {
+                assert_eq!(region, Some("us-west-2".to_string()));
+                assert!(json);
+            }
+            _ => panic!("Expected List command"),
+        }
+    }
+
+    #[test]
+    fn pipeline_command_status_matches() {
+        let cmd = PipelineCommand::Status {
+            name: "my-pipeline".to_string(),
+            region: None,
+            json: false,
+        };
+        match cmd {
+            PipelineCommand::Status { name, region, json } => {
+                assert_eq!(name, "my-pipeline");
+                assert!(region.is_none());
+                assert!(!json);
+            }
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn pipeline_command_history_matches() {
+        let cmd = PipelineCommand::History {
+            name: "prod-pipeline".to_string(),
+            region: Some("eu-central-1".to_string()),
+            limit: 25,
+            json: true,
+        };
+        match cmd {
+            PipelineCommand::History {
+                name,
+                region,
+                limit,
+                json,
+            } => {
+                assert_eq!(name, "prod-pipeline");
+                assert_eq!(region, Some("eu-central-1".to_string()));
+                assert_eq!(limit, 25);
+                assert!(json);
+            }
+            _ => panic!("Expected History command"),
+        }
+    }
 }

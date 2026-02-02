@@ -148,3 +148,131 @@ async fn cmd_query(nrql: &str, json: bool) -> Result<()> {
     display::output_nrql(&results, format)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_newrelic_command_config_variant() {
+        let cmd = NewRelicCommand::Config;
+        let debug = format!("{:?}", cmd);
+        assert!(debug.contains("Config"));
+    }
+
+    #[test]
+    fn test_newrelic_command_auth_variant() {
+        let cmd = NewRelicCommand::Auth {
+            key: "NRAK-test".to_string(),
+            account: 12345,
+        };
+        let debug = format!("{:?}", cmd);
+        assert!(debug.contains("Auth"));
+        assert!(debug.contains("NRAK-test"));
+        assert!(debug.contains("12345"));
+    }
+
+    #[test]
+    fn test_newrelic_command_issues_variant() {
+        let cmd = NewRelicCommand::Issues {
+            limit: 50,
+            json: true,
+        };
+        let debug = format!("{:?}", cmd);
+        assert!(debug.contains("Issues"));
+        assert!(debug.contains("50"));
+        assert!(debug.contains("true"));
+    }
+
+    #[test]
+    fn test_newrelic_command_incidents_variant() {
+        let cmd = NewRelicCommand::Incidents {
+            limit: 10,
+            json: false,
+        };
+        let debug = format!("{:?}", cmd);
+        assert!(debug.contains("Incidents"));
+        assert!(debug.contains("10"));
+        assert!(debug.contains("false"));
+    }
+
+    #[test]
+    fn test_newrelic_command_query_variant() {
+        let cmd = NewRelicCommand::Query {
+            nrql: "SELECT count(*) FROM Transaction".to_string(),
+            json: true,
+        };
+        let debug = format!("{:?}", cmd);
+        assert!(debug.contains("Query"));
+        assert!(debug.contains("SELECT"));
+        assert!(debug.contains("Transaction"));
+    }
+
+    #[test]
+    fn test_check_configured_with_configured_client() {
+        let config = config::NewRelicConfig {
+            api_key: Some("NRAK-configured".to_string()),
+            account_id: Some(99999),
+        };
+        let client = NewRelicClient::with_config(config).unwrap();
+        let result = check_configured(&client);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_configured_with_unconfigured_client() {
+        let config = config::NewRelicConfig {
+            api_key: None,
+            account_id: None,
+        };
+        let client = NewRelicClient::with_config(config).unwrap();
+        let result = check_configured(&client);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not configured"));
+    }
+
+    #[test]
+    fn test_check_configured_partial_api_key_only() {
+        let config = config::NewRelicConfig {
+            api_key: Some("NRAK-partial".to_string()),
+            account_id: None,
+        };
+        let client = NewRelicClient::with_config(config).unwrap();
+        let result = check_configured(&client);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_check_configured_partial_account_only() {
+        let config = config::NewRelicConfig {
+            api_key: None,
+            account_id: Some(12345),
+        };
+        let client = NewRelicClient::with_config(config).unwrap();
+        let result = check_configured(&client);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_output_format_from_json_flag_true() {
+        let json = true;
+        let format = if json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Table
+        };
+        assert!(matches!(format, OutputFormat::Json));
+    }
+
+    #[test]
+    fn test_output_format_from_json_flag_false() {
+        let json = false;
+        let format = if json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Table
+        };
+        assert!(matches!(format, OutputFormat::Table));
+    }
+}

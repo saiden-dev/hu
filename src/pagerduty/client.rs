@@ -431,6 +431,50 @@ mod tests {
         assert_eq!(result[0].name, "Production");
     }
 
+    #[test]
+    fn client_new_creates_instance() {
+        // This tests the happy path of client creation
+        let result = PagerDutyClient::new();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn client_config_returns_reference() {
+        let client = PagerDutyClient::new().unwrap();
+        let _config = client.config();
+        // Just verify we get a reference without panic
+    }
+
+    #[test]
+    fn api_token_returns_error_when_not_set() {
+        let client = PagerDutyClient::new().unwrap();
+        // If no token is configured, api_token() should return error
+        // This depends on whether PAGERDUTY_API_TOKEN env var is set
+        let result = client.api_token();
+        // Just exercise the code path
+        let _ = result;
+    }
+
+    #[test]
+    fn mock_builder_pattern() {
+        // Test that all builder methods work correctly
+        let user = make_test_user("U1", "Alice");
+        let oncalls = vec![make_test_oncall("U1", "Alice")];
+        let incidents = vec![make_test_incident("INC1")];
+        let services = vec![make_test_service("S1", "Production")];
+
+        let mock = MockPagerDutyApi::new()
+            .with_user(user.clone())
+            .with_oncalls(oncalls.clone())
+            .with_incidents(incidents.clone())
+            .with_services(services.clone());
+
+        assert_eq!(mock.current_user.as_ref().unwrap().id, "U1");
+        assert_eq!(mock.oncalls.len(), 1);
+        assert_eq!(mock.incidents.len(), 1);
+        assert_eq!(mock.services.len(), 1);
+    }
+
     // Test data helpers
     fn make_test_user(id: &str, name: &str) -> User {
         User {

@@ -161,4 +161,121 @@ mod tests {
             assert!(p.to_string_lossy().contains("settings.toml"));
         }
     }
+
+    #[test]
+    fn test_newrelic_config_serialization() {
+        let config = NewRelicConfig {
+            api_key: Some("NRAK-test123".to_string()),
+            account_id: Some(99999),
+        };
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        assert!(serialized.contains("api_key"));
+        assert!(serialized.contains("NRAK-test123"));
+        assert!(serialized.contains("account_id"));
+        assert!(serialized.contains("99999"));
+    }
+
+    #[test]
+    fn test_newrelic_config_deserialization() {
+        let json = r#"{"api_key":"NRAK-abc","account_id":12345}"#;
+        let config: NewRelicConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.api_key, Some("NRAK-abc".to_string()));
+        assert_eq!(config.account_id, Some(12345));
+    }
+
+    #[test]
+    fn test_newrelic_config_deserialization_null_fields() {
+        let json = r#"{"api_key":null,"account_id":null}"#;
+        let config: NewRelicConfig = serde_json::from_str(json).unwrap();
+        assert!(config.api_key.is_none());
+        assert!(config.account_id.is_none());
+        assert!(!config.is_configured());
+    }
+
+    #[test]
+    fn test_newrelic_config_deserialization_empty_object() {
+        let json = r#"{}"#;
+        let config: NewRelicConfig = serde_json::from_str(json).unwrap();
+        assert!(config.api_key.is_none());
+        assert!(config.account_id.is_none());
+    }
+
+    #[test]
+    fn test_newrelic_config_clone() {
+        let config = NewRelicConfig {
+            api_key: Some("NRAK-xyz".to_string()),
+            account_id: Some(54321),
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.api_key, config.api_key);
+        assert_eq!(cloned.account_id, config.account_id);
+    }
+
+    #[test]
+    fn test_newrelic_config_debug() {
+        let config = NewRelicConfig {
+            api_key: Some("NRAK-key".to_string()),
+            account_id: Some(11111),
+        };
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("NewRelicConfig"));
+        assert!(debug.contains("api_key"));
+        assert!(debug.contains("account_id"));
+    }
+
+    #[test]
+    fn test_settings_file_deserialization_with_newrelic() {
+        let toml = r#"
+[newrelic]
+api_key = "NRAK-fromfile"
+account_id = 777
+"#;
+        let settings: SettingsFile = toml::from_str(toml).unwrap();
+        assert!(settings.newrelic.is_some());
+        let nr = settings.newrelic.unwrap();
+        assert_eq!(nr.api_key, Some("NRAK-fromfile".to_string()));
+        assert_eq!(nr.account_id, Some(777));
+    }
+
+    #[test]
+    fn test_settings_file_deserialization_empty() {
+        let toml = "";
+        let settings: SettingsFile = toml::from_str(toml).unwrap();
+        assert!(settings.newrelic.is_none());
+    }
+
+    #[test]
+    fn test_settings_file_deserialization_without_newrelic() {
+        let toml = r#"
+[sentry]
+auth_token = "secret"
+"#;
+        let settings: SettingsFile = toml::from_str(toml).unwrap();
+        assert!(settings.newrelic.is_none());
+    }
+
+    #[test]
+    fn test_settings_file_debug() {
+        let settings = SettingsFile { newrelic: None };
+        let debug = format!("{:?}", settings);
+        assert!(debug.contains("SettingsFile"));
+    }
+
+    #[test]
+    fn test_settings_file_default() {
+        let settings = SettingsFile::default();
+        assert!(settings.newrelic.is_none());
+    }
+
+    #[test]
+    fn test_config_path_hu_directory() {
+        if let Some(path) = config_path() {
+            // Should be in ~/.config/hu/settings.toml
+            let path_str = path.to_string_lossy();
+            assert!(path_str.contains(".config"));
+            assert!(path_str.contains("hu"));
+            assert!(path_str.ends_with("settings.toml"));
+        }
+    }
 }

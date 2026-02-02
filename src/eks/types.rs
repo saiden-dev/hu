@@ -381,4 +381,385 @@ mod tests {
         let json = serde_json::to_string(&pod).unwrap();
         assert!(json.contains("test"));
     }
+
+    #[test]
+    fn pod_deserialize() {
+        let json = r#"{
+            "name": "test-pod",
+            "namespace": "default",
+            "status": "Running",
+            "ready": "1/1",
+            "restarts": 5,
+            "age": "2d",
+            "node": "worker-1"
+        }"#;
+        let pod: Pod = serde_json::from_str(json).unwrap();
+        assert_eq!(pod.name, "test-pod");
+        assert_eq!(pod.restarts, 5);
+        assert_eq!(pod.node, Some("worker-1".to_string()));
+    }
+
+    #[test]
+    fn pod_deserialize_no_node() {
+        let json = r#"{
+            "name": "test-pod",
+            "namespace": "default",
+            "status": "Running",
+            "ready": "1/1",
+            "restarts": 0,
+            "age": "1h"
+        }"#;
+        let pod: Pod = serde_json::from_str(json).unwrap();
+        assert!(pod.node.is_none());
+    }
+
+    #[test]
+    fn output_format_debug() {
+        let format = OutputFormat::Json;
+        let debug = format!("{:?}", format);
+        assert!(debug.contains("Json"));
+    }
+
+    #[test]
+    fn output_format_clone() {
+        let format = OutputFormat::Table;
+        let cloned = format;
+        assert_eq!(cloned, OutputFormat::Table);
+    }
+
+    #[test]
+    fn output_format_eq() {
+        assert_eq!(OutputFormat::Table, OutputFormat::Table);
+        assert_eq!(OutputFormat::Json, OutputFormat::Json);
+        assert_ne!(OutputFormat::Table, OutputFormat::Json);
+    }
+
+    #[test]
+    fn kubectl_config_debug() {
+        let config = KubectlConfig {
+            context: Some("test".to_string()),
+            namespace: Some("default".to_string()),
+        };
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn kubectl_config_clone() {
+        let config = KubectlConfig {
+            context: Some("prod".to_string()),
+            namespace: None,
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.context, Some("prod".to_string()));
+    }
+
+    #[test]
+    fn pod_list_debug() {
+        let pod_list = PodList { items: vec![] };
+        let debug = format!("{:?}", pod_list);
+        assert!(debug.contains("PodList"));
+    }
+
+    #[test]
+    fn pod_item_debug() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "debug-test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let debug = format!("{:?}", item);
+        assert!(debug.contains("debug-test"));
+    }
+
+    #[test]
+    fn pod_metadata_debug() {
+        let meta = PodMetadata {
+            name: "test".to_string(),
+            namespace: "ns".to_string(),
+            creation_timestamp: Some("2026-01-01T00:00:00Z".to_string()),
+        };
+        let debug = format!("{:?}", meta);
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn pod_spec_debug() {
+        let spec = PodSpec {
+            node_name: Some("node-1".to_string()),
+            containers: vec![Container {
+                name: "main".to_string(),
+            }],
+        };
+        let debug = format!("{:?}", spec);
+        assert!(debug.contains("node-1"));
+    }
+
+    #[test]
+    fn pod_spec_default() {
+        let spec = PodSpec::default();
+        assert!(spec.node_name.is_none());
+        assert!(spec.containers.is_empty());
+    }
+
+    #[test]
+    fn container_debug() {
+        let container = Container {
+            name: "sidecar".to_string(),
+        };
+        let debug = format!("{:?}", container);
+        assert!(debug.contains("sidecar"));
+    }
+
+    #[test]
+    fn pod_status_debug() {
+        let status = PodStatus {
+            phase: "Pending".to_string(),
+            container_statuses: vec![],
+        };
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("Pending"));
+    }
+
+    #[test]
+    fn container_status_debug() {
+        let status = ContainerStatus {
+            name: "app".to_string(),
+            ready: true,
+            restart_count: 3,
+        };
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("app"));
+        assert!(debug.contains("true"));
+    }
+
+    #[test]
+    fn ready_string_all_ready() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![
+                    ContainerStatus {
+                        name: "a".to_string(),
+                        ready: true,
+                        restart_count: 0,
+                    },
+                    ContainerStatus {
+                        name: "b".to_string(),
+                        ready: true,
+                        restart_count: 0,
+                    },
+                ],
+            },
+        };
+        let pod = item.to_pod();
+        assert_eq!(pod.ready, "2/2");
+    }
+
+    #[test]
+    fn ready_string_none_ready() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Pending".to_string(),
+                container_statuses: vec![
+                    ContainerStatus {
+                        name: "a".to_string(),
+                        ready: false,
+                        restart_count: 0,
+                    },
+                    ContainerStatus {
+                        name: "b".to_string(),
+                        ready: false,
+                        restart_count: 0,
+                    },
+                ],
+            },
+        };
+        let pod = item.to_pod();
+        assert_eq!(pod.ready, "0/2");
+    }
+
+    #[test]
+    fn total_restarts_sum() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![
+                    ContainerStatus {
+                        name: "a".to_string(),
+                        ready: true,
+                        restart_count: 5,
+                    },
+                    ContainerStatus {
+                        name: "b".to_string(),
+                        ready: true,
+                        restart_count: 3,
+                    },
+                    ContainerStatus {
+                        name: "c".to_string(),
+                        ready: true,
+                        restart_count: 2,
+                    },
+                ],
+            },
+        };
+        let pod = item.to_pod();
+        assert_eq!(pod.restarts, 10);
+    }
+
+    #[test]
+    fn age_string_hours() {
+        // Use a timestamp from a few hours ago
+        let now = chrono::Utc::now();
+        let hours_ago = now - chrono::Duration::hours(5);
+        let ts = hours_ago.to_rfc3339();
+
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: Some(ts),
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert!(pod.age.ends_with('h'), "Expected hours, got: {}", pod.age);
+    }
+
+    #[test]
+    fn age_string_minutes() {
+        let now = chrono::Utc::now();
+        let mins_ago = now - chrono::Duration::minutes(30);
+        let ts = mins_ago.to_rfc3339();
+
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: Some(ts),
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert!(pod.age.ends_with('m'), "Expected minutes, got: {}", pod.age);
+    }
+
+    #[test]
+    fn age_string_seconds() {
+        let now = chrono::Utc::now();
+        let secs_ago = now - chrono::Duration::seconds(45);
+        let ts = secs_ago.to_rfc3339();
+
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: Some(ts),
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert!(pod.age.ends_with('s'), "Expected seconds, got: {}", pod.age);
+    }
+
+    #[test]
+    fn age_string_days() {
+        let now = chrono::Utc::now();
+        let days_ago = now - chrono::Duration::days(7);
+        let ts = days_ago.to_rfc3339();
+
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: Some(ts),
+            },
+            spec: None,
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert!(pod.age.ends_with('d'), "Expected days, got: {}", pod.age);
+    }
+
+    #[test]
+    fn pod_with_spec_node() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: Some(PodSpec {
+                node_name: Some("worker-abc".to_string()),
+                containers: vec![],
+            }),
+            status: PodStatus {
+                phase: "Running".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert_eq!(pod.node, Some("worker-abc".to_string()));
+    }
+
+    #[test]
+    fn pod_with_spec_no_node() {
+        let item = PodItem {
+            metadata: PodMetadata {
+                name: "test".to_string(),
+                namespace: "default".to_string(),
+                creation_timestamp: None,
+            },
+            spec: Some(PodSpec {
+                node_name: None,
+                containers: vec![],
+            }),
+            status: PodStatus {
+                phase: "Pending".to_string(),
+                container_statuses: vec![],
+            },
+        };
+        let pod = item.to_pod();
+        assert!(pod.node.is_none());
+    }
 }

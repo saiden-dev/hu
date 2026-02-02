@@ -23,3 +23,36 @@ pub async fn run_command(cmd: GhCommand) -> anyhow::Result<()> {
         }
     }
 }
+
+/// Print message for unimplemented Runs command (extracted for testability)
+pub fn runs_not_implemented_msg() -> &'static str {
+    "gh runs: not yet implemented"
+}
+
+/// Print message for unimplemented Ci command (extracted for testability)
+pub fn ci_not_implemented_msg() -> &'static str {
+    "gh ci: not yet implemented"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runs_not_implemented_returns_message() {
+        let msg = runs_not_implemented_msg();
+        assert_eq!(msg, "gh runs: not yet implemented");
+    }
+
+    #[test]
+    fn ci_not_implemented_returns_message() {
+        let msg = ci_not_implemented_msg();
+        assert_eq!(msg, "gh ci: not yet implemented");
+    }
+
+    #[test]
+    fn gh_command_exported() {
+        // Verify GhCommand is accessible
+        let _ = std::any::type_name::<GhCommand>();
+    }
+}

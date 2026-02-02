@@ -415,4 +415,120 @@ mod tests {
         let result = output_nrql(&results, OutputFormat::Table);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_output_nrql_table_non_object() {
+        // Test fallback to JSON when results are not objects
+        let results = vec![serde_json::json!("string value"), serde_json::json!(123)];
+        let result = output_nrql(&results, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_nrql_table_missing_keys() {
+        // Test when second object is missing keys from first
+        let results = vec![
+            serde_json::json!({"a": 1, "b": 2}),
+            serde_json::json!({"a": 3}), // missing "b"
+        ];
+        let result = output_nrql(&results, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_issues_table_with_data() {
+        let issues = vec![Issue {
+            issue_id: "123456789012345678901234567890".to_string(), // long ID
+            priority: "MEDIUM".to_string(),
+            state: "CREATED".to_string(),
+            title: vec![
+                "This is a very long title that should be truncated for display purposes"
+                    .to_string(),
+            ],
+            entity_names: vec!["service-one".to_string(), "service-two".to_string()],
+            created_at: Some(chrono::Utc::now().timestamp() * 1000 - 86400000), // 1 day ago
+            closed_at: None,
+            activated_at: None,
+        }];
+        let result = output_issues(&issues, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_incidents_table_with_data() {
+        let incidents = vec![Incident {
+            incident_id: "INC-VERYLONGIDTHATWILLBETRUNCATED".to_string(),
+            priority: "LOW".to_string(),
+            state: "PENDING".to_string(),
+            title: "This incident title is also quite long and needs truncation".to_string(),
+            account_ids: vec![1, 2, 3],
+            created_at: Some(chrono::Utc::now().timestamp() * 1000),
+            closed_at: Some(chrono::Utc::now().timestamp() * 1000),
+        }];
+        let result = output_incidents(&incidents, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_format_time_invalid_timestamp() {
+        // Very old timestamp that might be invalid
+        let result = format_time(Some(-1000000000000000));
+        // Should still return something, not crash
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_format_json_value_object() {
+        let obj = serde_json::json!({"key": "value"});
+        let formatted = format_json_value(&obj);
+        assert!(formatted.contains("key"));
+        assert!(formatted.contains("value"));
+    }
+
+    #[test]
+    fn test_truncate_empty() {
+        assert_eq!(truncate("", 10), "");
+    }
+
+    #[test]
+    fn test_truncate_very_short_max() {
+        // Test edge case where max_len is very small
+        assert_eq!(truncate("hello", 3), "...");
+    }
+
+    #[test]
+    fn test_truncate_zero() {
+        // Test edge case where max_len is 0
+        let result = truncate("hello", 0);
+        // Should handle gracefully
+        assert!(result.len() <= 3); // "..." or empty
+    }
+
+    #[test]
+    fn test_output_config_status_configured() {
+        let config = super::super::config::NewRelicConfig {
+            api_key: Some("NRAK-test".to_string()),
+            account_id: Some(12345),
+        };
+        // Just verify it doesn't panic
+        output_config_status(&config);
+    }
+
+    #[test]
+    fn test_output_config_status_not_configured() {
+        let config = super::super::config::NewRelicConfig {
+            api_key: None,
+            account_id: None,
+        };
+        output_config_status(&config);
+    }
+
+    #[test]
+    fn test_output_config_status_partial() {
+        let config = super::super::config::NewRelicConfig {
+            api_key: Some("NRAK-partial".to_string()),
+            account_id: None,
+        };
+        output_config_status(&config);
+    }
 }

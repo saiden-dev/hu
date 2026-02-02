@@ -252,4 +252,74 @@ escalation_policy_ids = ["EP1"]
         assert_eq!(cloned.api_token, config.api_token);
         assert_eq!(cloned.escalation_policy_ids, config.escalation_policy_ids);
     }
+
+    #[test]
+    fn load_config_returns_default_when_no_file() {
+        // load_config should work even when config file doesn't exist
+        // It will return default config (possibly with env var override)
+        let result = load_config();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_config_invalid_toml() {
+        let invalid = "this is not valid [[[toml";
+        let result = parse_config(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_config_wrong_type_for_pagerduty() {
+        // pagerduty is a string instead of a table
+        let toml = r#"pagerduty = "not a table""#;
+        let result = parse_config(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn update_config_toml_invalid_existing() {
+        // Invalid TOML should still work - it creates a new table
+        let invalid = "this is not valid [[[toml";
+        let result = update_config_toml(invalid, "new-token");
+        // Should succeed by creating fresh config
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("api_token"));
+    }
+
+    #[test]
+    fn settings_file_default() {
+        let settings = SettingsFile::default();
+        assert!(settings.pagerduty.is_none());
+    }
+
+    #[test]
+    fn settings_file_debug() {
+        let settings = SettingsFile::default();
+        let debug = format!("{:?}", settings);
+        assert!(debug.contains("SettingsFile"));
+    }
+
+    #[test]
+    fn config_serialize() {
+        let config = PagerDutyConfig {
+            api_token: Some("token".to_string()),
+            escalation_policy_ids: vec!["EP1".to_string()],
+            schedule_ids: vec![],
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("token"));
+        assert!(json.contains("EP1"));
+    }
+
+    #[test]
+    fn config_deserialize() {
+        let json = r#"{
+            "api_token": "test-token",
+            "escalation_policy_ids": ["EP1"],
+            "schedule_ids": []
+        }"#;
+        let config: PagerDutyConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.api_token.as_deref(), Some("test-token"));
+        assert_eq!(config.escalation_policy_ids, vec!["EP1"]);
+    }
 }
