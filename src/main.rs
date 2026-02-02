@@ -60,13 +60,13 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
             print_subcommand_help("pagerduty")?;
         }
         Command::Sentry { cmd: Some(cmd) } => {
-            println!("sentry: {:?}", cmd);
+            return sentry::run(cmd).await;
         }
         Command::Sentry { cmd: None } => {
             print_subcommand_help("sentry")?;
         }
         Command::NewRelic { cmd: Some(cmd) } => {
-            println!("newrelic: {:?}", cmd);
+            return newrelic::run(cmd).await;
         }
         Command::NewRelic { cmd: None } => {
             print_subcommand_help("newrelic")?;
