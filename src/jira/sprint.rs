@@ -1,83 +1,44 @@
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 
 use super::client::{JiraApi, JiraClient};
-use super::types::{Board, Issue, Sprint};
+use super::types::Issue;
 
 /// Arguments for sprint command
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SprintArgs {
-    pub board: Option<u64>,
+    // Reserved for future options (e.g., filter by project)
+    pub _placeholder: Option<()>,
 }
 
 /// Run the jira sprint command
-pub async fn run(args: SprintArgs) -> Result<()> {
+pub async fn run(_args: SprintArgs) -> Result<()> {
     let client = JiraClient::new().await?;
-    let output = process_sprint(&client, args.board).await?;
+    let output = process_sprint(&client).await?;
     print!("{}", output);
     Ok(())
 }
 
 /// Process sprint command (business logic, testable)
-pub async fn process_sprint(client: &impl JiraApi, board_id: Option<u64>) -> Result<String> {
-    // Get board ID (auto-detect if not provided)
-    let board = if let Some(id) = board_id {
-        Board {
-            id,
-            name: String::new(),
-            board_type: String::new(),
-        }
-    } else {
-        let boards = client.get_boards().await?;
-        if boards.is_empty() {
-            bail!("No boards found. Make sure you have access to at least one Jira board.");
-        }
-        if boards.len() > 1 {
-            return Ok(format_board_selection(&boards));
-        }
-        boards.into_iter().next().unwrap()
-    };
+pub async fn process_sprint(client: &impl JiraApi) -> Result<String> {
+    // Use JQL to find all issues in active sprints
+    let jql = "sprint in openSprints() ORDER BY status ASC, updated DESC";
+    let issues = client.search_issues(jql).await?;
 
-    // Get active sprint
-    let sprint = client
-        .get_active_sprint(board.id)
-        .await?
-        .context("No active sprint found")?;
-
-    // Get sprint issues
-    let issues = client.get_sprint_issues(sprint.id).await?;
-
-    Ok(format_sprint_output(&sprint, &issues))
-}
-
-/// Format output when multiple boards exist
-fn format_board_selection(boards: &[Board]) -> String {
-    let mut output = String::new();
-    output.push_str("Multiple boards found. Please specify a board with --board:\n\n");
-    for board in boards {
-        output.push_str(&format!(
-            "  --board {}  # {} ({})\n",
-            board.id, board.name, board.board_type
-        ));
-    }
-    output
+    Ok(format_sprint_output(&issues))
 }
 
 /// Format sprint output
-fn format_sprint_output(sprint: &Sprint, issues: &[Issue]) -> String {
+fn format_sprint_output(issues: &[Issue]) -> String {
     let mut output = String::new();
 
-    // Sprint header
+    // Header
     output.push_str(&format!(
-        "\x1b[1m{}\x1b[0m ({})\n",
-        sprint.name, sprint.state
+        "\x1b[1mActive Sprint Issues\x1b[0m ({} total)\n\n",
+        issues.len()
     ));
-    if let (Some(start), Some(end)) = (&sprint.start_date, &sprint.end_date) {
-        output.push_str(&format!("{} - {}\n", format_date(start), format_date(end)));
-    }
-    output.push('\n');
 
     if issues.is_empty() {
-        output.push_str("No issues in sprint\n");
+        output.push_str("No issues in active sprints\n");
         return output;
     }
 
@@ -89,7 +50,7 @@ fn format_sprint_output(sprint: &Sprint, issues: &[Issue]) -> String {
     }
 
     // Status order preference
-    let status_order = ["To Do", "In Progress", "In Review", "Done"];
+    let status_order = ["To Do", "In Progress", "In Review", "CODE REVIEW", "Done"];
 
     // Output in order, then any remaining
     for status in &status_order {
@@ -112,9 +73,9 @@ fn format_sprint_output(sprint: &Sprint, issues: &[Issue]) -> String {
 fn format_status_section(status: &str, issues: &[&Issue]) -> String {
     let mut output = String::new();
     let status_color = match status {
-        "Done" => "\x1b[32m",        // green
-        "In Progress" => "\x1b[33m", // yellow
-        _ => "\x1b[34m",             // blue
+        "Done" => "\x1b[32m",                                      // green
+        "In Progress" | "In Review" | "CODE REVIEW" => "\x1b[33m", // yellow
+        _ => "\x1b[34m",                                           // blue
     };
     output.push_str(&format!(
         "{}{}\x1b[0m ({})\n",
@@ -134,92 +95,35 @@ fn format_status_section(status: &str, issues: &[&Issue]) -> String {
     output
 }
 
-/// Format date string (extract date part only)
-fn format_date(date: &str) -> &str {
-    // ISO dates are like "2024-01-15T10:00:00.000Z"
-    date.split('T').next().unwrap_or(date)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn sprint_args_debug() {
-        let args = SprintArgs { board: Some(42) };
+        let args = SprintArgs::default();
         let debug_str = format!("{:?}", args);
         assert!(debug_str.contains("SprintArgs"));
     }
 
     #[test]
     fn sprint_args_clone() {
-        let args = SprintArgs { board: Some(42) };
+        let args = SprintArgs::default();
         let cloned = args.clone();
-        assert_eq!(cloned.board, args.board);
-    }
-
-    #[test]
-    fn format_date_extracts_date_part() {
-        assert_eq!(format_date("2024-01-15T10:00:00.000Z"), "2024-01-15");
-        assert_eq!(format_date("2024-01-15"), "2024-01-15");
-    }
-
-    #[test]
-    fn format_date_handles_empty() {
-        assert_eq!(format_date(""), "");
-    }
-
-    #[test]
-    fn format_board_selection_lists_boards() {
-        let boards = vec![
-            Board {
-                id: 1,
-                name: "Board One".to_string(),
-                board_type: "scrum".to_string(),
-            },
-            Board {
-                id: 2,
-                name: "Board Two".to_string(),
-                board_type: "kanban".to_string(),
-            },
-        ];
-        let output = format_board_selection(&boards);
-        assert!(output.contains("Multiple boards found"));
-        assert!(output.contains("--board 1"));
-        assert!(output.contains("Board One"));
-        assert!(output.contains("scrum"));
-        assert!(output.contains("--board 2"));
-        assert!(output.contains("Board Two"));
-        assert!(output.contains("kanban"));
+        assert_eq!(cloned._placeholder, args._placeholder);
     }
 
     #[test]
     fn format_sprint_output_shows_header() {
-        let sprint = Sprint {
-            id: 1,
-            name: "Sprint 1".to_string(),
-            state: "active".to_string(),
-            start_date: Some("2024-01-01".to_string()),
-            end_date: Some("2024-01-14".to_string()),
-        };
         let issues = vec![];
-        let output = format_sprint_output(&sprint, &issues);
-        assert!(output.contains("Sprint 1"));
-        assert!(output.contains("active"));
-        assert!(output.contains("2024-01-01"));
-        assert!(output.contains("2024-01-14"));
-        assert!(output.contains("No issues in sprint"));
+        let output = format_sprint_output(&issues);
+        assert!(output.contains("Active Sprint Issues"));
+        assert!(output.contains("0 total"));
+        assert!(output.contains("No issues in active sprints"));
     }
 
     #[test]
     fn format_sprint_output_groups_by_status() {
-        let sprint = Sprint {
-            id: 1,
-            name: "Sprint".to_string(),
-            state: "active".to_string(),
-            start_date: None,
-            end_date: None,
-        };
         let issues = vec![
             Issue {
                 key: "A-1".to_string(),
@@ -249,7 +153,7 @@ mod tests {
                 updated: "2024-01-01T00:00:00Z".to_string(),
             },
         ];
-        let output = format_sprint_output(&sprint, &issues);
+        let output = format_sprint_output(&issues);
         assert!(output.contains("A-1"));
         assert!(output.contains("Task 1"));
         assert!(output.contains("Alice"));
@@ -304,8 +208,6 @@ mod tests {
 
     // Mock client for testing process_sprint
     struct MockJiraClient {
-        boards: Vec<Board>,
-        sprint: Option<Sprint>,
         issues: Vec<Issue>,
     }
 
@@ -314,24 +216,12 @@ mod tests {
             unimplemented!()
         }
 
-        async fn get_boards(&self) -> Result<Vec<Board>> {
-            Ok(self.boards.clone())
-        }
-
-        async fn get_active_sprint(&self, _board_id: u64) -> Result<Option<Sprint>> {
-            Ok(self.sprint.clone())
-        }
-
-        async fn get_sprint_issues(&self, _sprint_id: u64) -> Result<Vec<Issue>> {
-            Ok(self.issues.clone())
-        }
-
         async fn get_issue(&self, _key: &str) -> Result<Issue> {
             unimplemented!()
         }
 
         async fn search_issues(&self, _jql: &str) -> Result<Vec<Issue>> {
-            unimplemented!()
+            Ok(self.issues.clone())
         }
 
         async fn update_issue(&self, _key: &str, _update: &IssueUpdate) -> Result<()> {
@@ -348,97 +238,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_sprint_auto_detects_single_board() {
+    async fn process_sprint_returns_issues() {
         let client = MockJiraClient {
-            boards: vec![Board {
-                id: 42,
-                name: "Main".to_string(),
-                board_type: "scrum".to_string(),
+            issues: vec![Issue {
+                key: "TEST-1".to_string(),
+                summary: "Test issue".to_string(),
+                status: "In Progress".to_string(),
+                issue_type: "Task".to_string(),
+                assignee: Some("Dev".to_string()),
+                description: None,
+                updated: "2024-01-01".to_string(),
             }],
-            sprint: Some(Sprint {
-                id: 100,
-                name: "Sprint 1".to_string(),
-                state: "active".to_string(),
-                start_date: None,
-                end_date: None,
-            }),
-            issues: vec![],
         };
 
-        let output = process_sprint(&client, None).await.unwrap();
-        assert!(output.contains("Sprint 1"));
+        let output = process_sprint(&client).await.unwrap();
+        assert!(output.contains("TEST-1"));
+        assert!(output.contains("Test issue"));
+        assert!(output.contains("In Progress"));
     }
 
     #[tokio::test]
-    async fn process_sprint_shows_board_selection_for_multiple() {
-        let client = MockJiraClient {
-            boards: vec![
-                Board {
-                    id: 1,
-                    name: "B1".to_string(),
-                    board_type: "scrum".to_string(),
-                },
-                Board {
-                    id: 2,
-                    name: "B2".to_string(),
-                    board_type: "kanban".to_string(),
-                },
-            ],
-            sprint: None,
-            issues: vec![],
-        };
+    async fn process_sprint_handles_empty() {
+        let client = MockJiraClient { issues: vec![] };
 
-        let output = process_sprint(&client, None).await.unwrap();
-        assert!(output.contains("Multiple boards found"));
-        assert!(output.contains("--board 1"));
-        assert!(output.contains("--board 2"));
-    }
-
-    #[tokio::test]
-    async fn process_sprint_uses_specified_board() {
-        let client = MockJiraClient {
-            boards: vec![],
-            sprint: Some(Sprint {
-                id: 200,
-                name: "Sprint 2".to_string(),
-                state: "active".to_string(),
-                start_date: None,
-                end_date: None,
-            }),
-            issues: vec![],
-        };
-
-        let output = process_sprint(&client, Some(99)).await.unwrap();
-        assert!(output.contains("Sprint 2"));
-    }
-
-    #[tokio::test]
-    async fn process_sprint_fails_no_boards() {
-        let client = MockJiraClient {
-            boards: vec![],
-            sprint: None,
-            issues: vec![],
-        };
-
-        let result = process_sprint(&client, None).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No boards found"));
-    }
-
-    #[tokio::test]
-    async fn process_sprint_fails_no_active_sprint() {
-        let client = MockJiraClient {
-            boards: vec![Board {
-                id: 1,
-                name: "B".to_string(),
-                board_type: "s".to_string(),
-            }],
-            sprint: None,
-            issues: vec![],
-        };
-
-        let result = process_sprint(&client, None).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No active sprint"));
+        let output = process_sprint(&client).await.unwrap();
+        assert!(output.contains("No issues in active sprints"));
     }
 }

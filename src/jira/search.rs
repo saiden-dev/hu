@@ -82,7 +82,7 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::{Board, IssueUpdate, Sprint, Transition, User};
+    use super::super::types::{IssueUpdate, Transition, User};
     use super::*;
 
     #[test]
@@ -227,18 +227,6 @@ mod tests {
 
     impl JiraApi for MockJiraClient {
         async fn get_current_user(&self) -> Result<User> {
-            unimplemented!()
-        }
-
-        async fn get_boards(&self) -> Result<Vec<Board>> {
-            unimplemented!()
-        }
-
-        async fn get_active_sprint(&self, _board_id: u64) -> Result<Option<Sprint>> {
-            unimplemented!()
-        }
-
-        async fn get_sprint_issues(&self, _sprint_id: u64) -> Result<Vec<Issue>> {
             unimplemented!()
         }
 

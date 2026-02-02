@@ -109,7 +109,7 @@ fn find_transition<'a>(transitions: &'a [Transition], target: &str) -> Result<&'
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::{Board, Issue, Sprint, User};
+    use super::super::types::User;
     use super::*;
 
     #[test]
@@ -233,23 +233,11 @@ mod tests {
             Ok(self.user.clone())
         }
 
-        async fn get_boards(&self) -> Result<Vec<Board>> {
+        async fn get_issue(&self, _key: &str) -> Result<super::super::types::Issue> {
             unimplemented!()
         }
 
-        async fn get_active_sprint(&self, _board_id: u64) -> Result<Option<Sprint>> {
-            unimplemented!()
-        }
-
-        async fn get_sprint_issues(&self, _sprint_id: u64) -> Result<Vec<Issue>> {
-            unimplemented!()
-        }
-
-        async fn get_issue(&self, _key: &str) -> Result<Issue> {
-            unimplemented!()
-        }
-
-        async fn search_issues(&self, _jql: &str) -> Result<Vec<Issue>> {
+        async fn search_issues(&self, _jql: &str) -> Result<Vec<super::super::types::Issue>> {
             unimplemented!()
         }
 

@@ -1,7 +1,7 @@
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 
 use super::client::{JiraApi, JiraClient};
-use super::types::{Board, Issue, Sprint};
+use super::types::Issue;
 
 // ANSI color codes
 const GREEN: &str = "\x1b[32m";
@@ -11,57 +11,22 @@ const GRAY: &str = "\x1b[90m";
 const BOLD: &str = "\x1b[1m";
 const RESET: &str = "\x1b[0m";
 
-/// Run the jira tickets command (list current sprint tickets)
-pub async fn run(board_id: Option<u64>) -> Result<()> {
+/// Run the jira tickets command (list current sprint tickets assigned to me)
+pub async fn run() -> Result<()> {
     let client = JiraClient::new().await?;
-    let output = process_tickets(&client, board_id).await?;
+    let output = process_tickets(&client).await?;
     print!("{}", output);
     Ok(())
 }
 
 /// Process tickets command (business logic, testable)
-pub async fn process_tickets(client: &impl JiraApi, board_id: Option<u64>) -> Result<String> {
-    // Get board ID (auto-detect if not provided)
-    let board = if let Some(id) = board_id {
-        Board {
-            id,
-            name: String::new(),
-            board_type: String::new(),
-        }
-    } else {
-        let boards = client.get_boards().await?;
-        if boards.is_empty() {
-            bail!("No boards found. Make sure you have access to at least one Jira board.");
-        }
-        if boards.len() > 1 {
-            return Ok(format_board_selection(&boards));
-        }
-        boards.into_iter().next().unwrap()
-    };
+pub async fn process_tickets(client: &impl JiraApi) -> Result<String> {
+    // Use JQL to find issues in active sprints assigned to current user
+    let jql =
+        "sprint in openSprints() AND assignee = currentUser() ORDER BY status ASC, updated DESC";
+    let issues = client.search_issues(jql).await?;
 
-    // Get active sprint
-    let sprint = client
-        .get_active_sprint(board.id)
-        .await?
-        .context("No active sprint found")?;
-
-    // Get sprint issues
-    let issues = client.get_sprint_issues(sprint.id).await?;
-
-    Ok(format_tickets(&sprint, &issues))
-}
-
-/// Format output when multiple boards exist
-fn format_board_selection(boards: &[Board]) -> String {
-    let mut output = String::new();
-    output.push_str("Multiple boards found. Please specify a board with --board:\n\n");
-    for board in boards {
-        output.push_str(&format!(
-            "  --board {}  # {} ({})\n",
-            board.id, board.name, board.board_type
-        ));
-    }
-    output
+    Ok(format_tickets(&issues))
 }
 
 fn get_terminal_width() -> usize {
@@ -71,21 +36,20 @@ fn get_terminal_width() -> usize {
 }
 
 /// Format tickets as a table
-fn format_tickets(sprint: &Sprint, issues: &[Issue]) -> String {
+fn format_tickets(issues: &[Issue]) -> String {
     let mut output = String::new();
     let term_width = get_terminal_width();
 
-    // Sprint header
+    // Header
     output.push_str(&format!(
-        "{}{}{} ({} issues)\n\n",
+        "{}My Sprint Tickets{} ({} issues)\n\n",
         BOLD,
-        sprint.name,
         RESET,
         issues.len()
     ));
 
     if issues.is_empty() {
-        output.push_str("No tickets in sprint\n");
+        output.push_str("No tickets assigned to you in active sprints\n");
         return output;
     }
 
@@ -108,53 +72,51 @@ fn format_tickets(sprint: &Sprint, issues: &[Issue]) -> String {
         .max()
         .unwrap_or(4)
         .max(4);
-    let assignee_width = issues
-        .iter()
-        .map(|i| i.assignee.as_ref().map(|a| a.chars().count()).unwrap_or(1))
-        .max()
-        .unwrap_or(8)
-        .clamp(8, 20); // Cap assignee at 20
 
-    // Layout: │ Key │ Status │ Type │ Assignee │ Summary │
-    // Borders take: 6 separators × 3 chars = 18 chars
-    let border_overhead = 18;
-    let fixed_cols = key_width + status_width + type_width + assignee_width;
+    // Layout: │ Key │ Status │ Type │ Summary │
+    // Borders take: 5 separators × 3 chars = 15 chars
+    let border_overhead = 15;
+    let fixed_cols = key_width + status_width + type_width;
     let available_for_summary = term_width
         .saturating_sub(border_overhead + fixed_cols)
         .max(20);
 
     // Top border
     output.push_str(&format!(
-        "┌{}┬{}┬{}┬{}┬{}┐\n",
+        "┌{}┬{}┬{}┬{}┐\n",
         "─".repeat(key_width + 2),
         "─".repeat(status_width + 2),
         "─".repeat(type_width + 2),
-        "─".repeat(assignee_width + 2),
         "─".repeat(available_for_summary + 2)
     ));
 
     // Header row
     output.push_str(&format!(
-        "│ {}{:<key_w$}{} │ {}{:<status_w$}{} │ {}{:<type_w$}{} │ {}{:<assign_w$}{} │ {}{:<sum_w$}{} │\n",
-        BOLD, "Key", RESET,
-        BOLD, "Status", RESET,
-        BOLD, "Type", RESET,
-        BOLD, "Assignee", RESET,
-        BOLD, "Summary", RESET,
+        "│ {}{:<key_w$}{} │ {}{:<status_w$}{} │ {}{:<type_w$}{} │ {}{:<sum_w$}{} │\n",
+        BOLD,
+        "Key",
+        RESET,
+        BOLD,
+        "Status",
+        RESET,
+        BOLD,
+        "Type",
+        RESET,
+        BOLD,
+        "Summary",
+        RESET,
         key_w = key_width,
         status_w = status_width,
         type_w = type_width,
-        assign_w = assignee_width,
         sum_w = available_for_summary,
     ));
 
     // Header separator
     output.push_str(&format!(
-        "├{}┼{}┼{}┼{}┼{}┤\n",
+        "├{}┼{}┼{}┼{}┤\n",
         "─".repeat(key_width + 2),
         "─".repeat(status_width + 2),
         "─".repeat(type_width + 2),
-        "─".repeat(assignee_width + 2),
         "─".repeat(available_for_summary + 2)
     ));
 
@@ -166,36 +128,31 @@ fn format_tickets(sprint: &Sprint, issues: &[Issue]) -> String {
             _ => BLUE,
         };
 
-        let assignee = issue.assignee.as_deref().unwrap_or("-");
-        let assignee_display = truncate(assignee, assignee_width);
         let summary_display = truncate(&issue.summary, available_for_summary);
 
         output.push_str(&format!(
-            "│ {:<key_w$} │ {}{:<status_w$}{} │ {:<type_w$} │ {}{:<assign_w$}{} │ {:<sum_w$} │\n",
+            "│ {:<key_w$} │ {}{:<status_w$}{} │ {}{:<type_w$}{} │ {:<sum_w$} │\n",
             issue.key,
             status_color,
             truncate(&issue.status, status_width),
             RESET,
-            truncate(&issue.issue_type, type_width),
             GRAY,
-            assignee_display,
+            truncate(&issue.issue_type, type_width),
             RESET,
             summary_display,
             key_w = key_width,
             status_w = status_width,
             type_w = type_width,
-            assign_w = assignee_width,
             sum_w = available_for_summary,
         ));
     }
 
     // Bottom border
     output.push_str(&format!(
-        "└{}┴{}┴{}┴{}┴{}┘\n",
+        "└{}┴{}┴{}┴{}┘\n",
         "─".repeat(key_width + 2),
         "─".repeat(status_width + 2),
         "─".repeat(type_width + 2),
-        "─".repeat(assignee_width + 2),
         "─".repeat(available_for_summary + 2)
     ));
 
@@ -245,50 +202,16 @@ mod tests {
     }
 
     #[test]
-    fn format_board_selection_lists_boards() {
-        let boards = vec![
-            Board {
-                id: 1,
-                name: "Board One".to_string(),
-                board_type: "scrum".to_string(),
-            },
-            Board {
-                id: 2,
-                name: "Board Two".to_string(),
-                board_type: "kanban".to_string(),
-            },
-        ];
-        let output = format_board_selection(&boards);
-        assert!(output.contains("Multiple boards found"));
-        assert!(output.contains("--board 1"));
-        assert!(output.contains("--board 2"));
-    }
-
-    #[test]
     fn format_tickets_empty() {
-        let sprint = Sprint {
-            id: 1,
-            name: "Sprint 1".to_string(),
-            state: "active".to_string(),
-            start_date: None,
-            end_date: None,
-        };
         let issues: Vec<Issue> = vec![];
-        let output = format_tickets(&sprint, &issues);
-        assert!(output.contains("Sprint 1"));
+        let output = format_tickets(&issues);
+        assert!(output.contains("My Sprint Tickets"));
         assert!(output.contains("0 issues"));
-        assert!(output.contains("No tickets"));
+        assert!(output.contains("No tickets assigned"));
     }
 
     #[test]
     fn format_tickets_with_issues() {
-        let sprint = Sprint {
-            id: 1,
-            name: "Sprint 1".to_string(),
-            state: "active".to_string(),
-            start_date: None,
-            end_date: None,
-        };
         let issues = vec![
             Issue {
                 key: "A-1".to_string(),
@@ -309,8 +232,8 @@ mod tests {
                 updated: "U".to_string(),
             },
         ];
-        let output = format_tickets(&sprint, &issues);
-        assert!(output.contains("Sprint 1"));
+        let output = format_tickets(&issues);
+        assert!(output.contains("My Sprint Tickets"));
         assert!(output.contains("2 issues"));
         assert!(output.contains("A-1"));
         assert!(output.contains("A-2"));
@@ -318,7 +241,6 @@ mod tests {
         assert!(output.contains("Second task"));
         assert!(output.contains("Task"));
         assert!(output.contains("Bug"));
-        assert!(output.contains("Alice"));
         // Box-drawing characters
         assert!(output.contains("┌"));
         assert!(output.contains("┐"));
@@ -330,13 +252,6 @@ mod tests {
 
     #[test]
     fn format_tickets_colors_status() {
-        let sprint = Sprint {
-            id: 1,
-            name: "S".to_string(),
-            state: "active".to_string(),
-            start_date: None,
-            end_date: None,
-        };
         let issues = vec![
             Issue {
                 key: "X-1".to_string(),
@@ -366,7 +281,7 @@ mod tests {
                 updated: "U".to_string(),
             },
         ];
-        let output = format_tickets(&sprint, &issues);
+        let output = format_tickets(&issues);
         assert!(output.contains(GREEN)); // Done
         assert!(output.contains(YELLOW)); // In Progress
         assert!(output.contains(BLUE)); // To Do
@@ -374,31 +289,22 @@ mod tests {
 
     #[test]
     fn format_tickets_handles_long_summary() {
-        let sprint = Sprint {
-            id: 1,
-            name: "Sprint".to_string(),
-            state: "active".to_string(),
-            start_date: None,
-            end_date: None,
-        };
         let issues = vec![Issue {
             key: "LONG-123".to_string(),
             summary: "This is a very long summary that should be truncated to fit within the terminal width appropriately".to_string(),
             status: "Open".to_string(),
             issue_type: "Story".to_string(),
-            assignee: Some("A Very Long Username That Should Also Be Truncated".to_string()),
+            assignee: Some("A Very Long Username".to_string()),
             description: None,
             updated: "U".to_string(),
         }];
-        let output = format_tickets(&sprint, &issues);
+        let output = format_tickets(&issues);
         // Should contain truncation indicator
         assert!(output.contains("…"));
     }
 
     // Mock client for testing
     struct MockJiraClient {
-        boards: Vec<Board>,
-        sprint: Option<Sprint>,
         issues: Vec<Issue>,
     }
 
@@ -407,24 +313,12 @@ mod tests {
             unimplemented!()
         }
 
-        async fn get_boards(&self) -> Result<Vec<Board>> {
-            Ok(self.boards.clone())
-        }
-
-        async fn get_active_sprint(&self, _board_id: u64) -> Result<Option<Sprint>> {
-            Ok(self.sprint.clone())
-        }
-
-        async fn get_sprint_issues(&self, _sprint_id: u64) -> Result<Vec<Issue>> {
-            Ok(self.issues.clone())
-        }
-
         async fn get_issue(&self, _key: &str) -> Result<Issue> {
             unimplemented!()
         }
 
         async fn search_issues(&self, _jql: &str) -> Result<Vec<Issue>> {
-            unimplemented!()
+            Ok(self.issues.clone())
         }
 
         async fn update_issue(&self, _key: &str, _update: &IssueUpdate) -> Result<()> {
@@ -441,75 +335,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_tickets_auto_detects_board() {
+    async fn process_tickets_returns_issues() {
         let client = MockJiraClient {
-            boards: vec![Board {
-                id: 42,
-                name: "Main".to_string(),
-                board_type: "scrum".to_string(),
+            issues: vec![Issue {
+                key: "TEST-1".to_string(),
+                summary: "Test issue".to_string(),
+                status: "Open".to_string(),
+                issue_type: "Task".to_string(),
+                assignee: Some("Me".to_string()),
+                description: None,
+                updated: "2024-01-01".to_string(),
             }],
-            sprint: Some(Sprint {
-                id: 100,
-                name: "Sprint 1".to_string(),
-                state: "active".to_string(),
-                start_date: None,
-                end_date: None,
-            }),
-            issues: vec![],
         };
 
-        let output = process_tickets(&client, None).await.unwrap();
-        assert!(output.contains("Sprint 1"));
+        let output = process_tickets(&client).await.unwrap();
+        assert!(output.contains("TEST-1"));
+        assert!(output.contains("Test issue"));
     }
 
     #[tokio::test]
-    async fn process_tickets_shows_board_selection() {
-        let client = MockJiraClient {
-            boards: vec![
-                Board {
-                    id: 1,
-                    name: "B1".to_string(),
-                    board_type: "scrum".to_string(),
-                },
-                Board {
-                    id: 2,
-                    name: "B2".to_string(),
-                    board_type: "kanban".to_string(),
-                },
-            ],
-            sprint: None,
-            issues: vec![],
-        };
+    async fn process_tickets_handles_empty() {
+        let client = MockJiraClient { issues: vec![] };
 
-        let output = process_tickets(&client, None).await.unwrap();
-        assert!(output.contains("Multiple boards found"));
-    }
-
-    #[tokio::test]
-    async fn process_tickets_fails_no_boards() {
-        let client = MockJiraClient {
-            boards: vec![],
-            sprint: None,
-            issues: vec![],
-        };
-
-        let result = process_tickets(&client, None).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn process_tickets_fails_no_sprint() {
-        let client = MockJiraClient {
-            boards: vec![Board {
-                id: 1,
-                name: "B".to_string(),
-                board_type: "s".to_string(),
-            }],
-            sprint: None,
-            issues: vec![],
-        };
-
-        let result = process_tickets(&client, None).await;
-        assert!(result.is_err());
+        let output = process_tickets(&client).await.unwrap();
+        assert!(output.contains("No tickets assigned"));
     }
 }

@@ -16,8 +16,8 @@ use update::UpdateArgs;
 pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
     match cmd {
         JiraCommand::Auth => auth_handler::run().await,
-        JiraCommand::Tickets { board } => tickets::run(board).await,
-        JiraCommand::Sprint { board } => sprint::run(sprint::SprintArgs { board }).await,
+        JiraCommand::Tickets => tickets::run().await,
+        JiraCommand::Sprint => sprint::run(sprint::SprintArgs::default()).await,
         JiraCommand::Search { query } => search::run(&query).await,
         JiraCommand::Show { key } => show::run(&key).await,
         JiraCommand::Update {

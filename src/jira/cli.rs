@@ -5,19 +5,11 @@ pub enum JiraCommand {
     /// Authenticate with Jira via OAuth 2.0
     Auth,
 
-    /// List tickets in current sprint
-    Tickets {
-        /// Board ID (auto-detects if only one board)
-        #[arg(long, short)]
-        board: Option<u64>,
-    },
+    /// List my tickets in current sprint
+    Tickets,
 
-    /// Show current sprint info
-    Sprint {
-        /// Board ID (auto-detects if only one board)
-        #[arg(long, short)]
-        board: Option<u64>,
-    },
+    /// Show all issues in current sprint
+    Sprint,
 
     /// Search tickets using JQL
     Search {
@@ -80,30 +72,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_tickets_with_board() {
-        let cmd = build_cmd();
-        let matches = cmd.try_get_matches_from(["test", "tickets", "--board", "42"]);
-        assert!(matches.is_ok());
-    }
-
-    #[test]
-    fn parses_tickets_with_board_short() {
-        let cmd = build_cmd();
-        let matches = cmd.try_get_matches_from(["test", "tickets", "-b", "42"]);
-        assert!(matches.is_ok());
-    }
-
-    #[test]
     fn parses_sprint() {
         let cmd = build_cmd();
         let matches = cmd.try_get_matches_from(["test", "sprint"]);
-        assert!(matches.is_ok());
-    }
-
-    #[test]
-    fn parses_sprint_with_board() {
-        let cmd = build_cmd();
-        let matches = cmd.try_get_matches_from(["test", "sprint", "--board", "123"]);
         assert!(matches.is_ok());
     }
 
@@ -190,15 +161,14 @@ mod tests {
 
     #[test]
     fn tickets_command_debug() {
-        let cmd = JiraCommand::Tickets { board: Some(42) };
+        let cmd = JiraCommand::Tickets;
         let debug_str = format!("{:?}", cmd);
         assert!(debug_str.contains("Tickets"));
-        assert!(debug_str.contains("42"));
     }
 
     #[test]
     fn sprint_command_debug() {
-        let cmd = JiraCommand::Sprint { board: None };
+        let cmd = JiraCommand::Sprint;
         let debug_str = format!("{:?}", cmd);
         assert!(debug_str.contains("Sprint"));
     }

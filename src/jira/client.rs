@@ -2,24 +2,12 @@ use anyhow::{bail, Context, Result};
 use std::future::Future;
 
 use super::auth;
-use super::types::{Board, Issue, IssueUpdate, Sprint, Transition, User};
+use super::types::{Issue, IssueUpdate, Transition, User};
 
 /// Trait for Jira API operations (enables mocking in tests)
 pub trait JiraApi: Send + Sync {
     /// Get current authenticated user
     fn get_current_user(&self) -> impl Future<Output = Result<User>> + Send;
-
-    /// Get all boards
-    fn get_boards(&self) -> impl Future<Output = Result<Vec<Board>>> + Send;
-
-    /// Get active sprint for a board
-    fn get_active_sprint(
-        &self,
-        board_id: u64,
-    ) -> impl Future<Output = Result<Option<Sprint>>> + Send;
-
-    /// Get issues in a sprint
-    fn get_sprint_issues(&self, sprint_id: u64) -> impl Future<Output = Result<Vec<Issue>>> + Send;
 
     /// Get a single issue by key
     fn get_issue(&self, key: &str) -> impl Future<Output = Result<Issue>> + Send;
@@ -73,14 +61,6 @@ impl JiraClient {
             self.cloud_id, path
         )
     }
-
-    /// Build API URL for Jira Agile API v1
-    fn agile_url(&self, path: &str) -> String {
-        format!(
-            "https://api.atlassian.com/ex/jira/{}/rest/agile/1.0{}",
-            self.cloud_id, path
-        )
-    }
 }
 
 impl JiraApi for JiraClient {
@@ -103,63 +83,6 @@ impl JiraApi for JiraClient {
         parse_user(&json).context("Failed to parse user response")
     }
 
-    async fn get_boards(&self) -> Result<Vec<Board>> {
-        let url = self.agile_url("/board");
-        let response = self
-            .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
-            .await
-            .context("Failed to get boards")?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            bail!("Failed to get boards: {}", error_text);
-        }
-
-        let json: serde_json::Value = response.json().await?;
-        Ok(parse_boards(&json))
-    }
-
-    async fn get_active_sprint(&self, board_id: u64) -> Result<Option<Sprint>> {
-        let url = self.agile_url(&format!("/board/{}/sprint?state=active", board_id));
-        let response = self
-            .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
-            .await
-            .context("Failed to get active sprint")?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            bail!("Failed to get active sprint: {}", error_text);
-        }
-
-        let json: serde_json::Value = response.json().await?;
-        Ok(parse_sprints(&json).into_iter().next())
-    }
-
-    async fn get_sprint_issues(&self, sprint_id: u64) -> Result<Vec<Issue>> {
-        let url = self.agile_url(&format!("/sprint/{}/issue", sprint_id));
-        let response = self
-            .client
-            .get(&url)
-            .bearer_auth(&self.access_token)
-            .send()
-            .await
-            .context("Failed to get sprint issues")?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            bail!("Failed to get sprint issues: {}", error_text);
-        }
-
-        let json: serde_json::Value = response.json().await?;
-        Ok(parse_issues(&json))
-    }
-
     async fn get_issue(&self, key: &str) -> Result<Issue> {
         let url = self.api_url(&format!("/issue/{}", key));
         let response = self
@@ -180,12 +103,16 @@ impl JiraApi for JiraClient {
     }
 
     async fn search_issues(&self, jql: &str) -> Result<Vec<Issue>> {
-        let url = self.api_url("/search");
+        // Use the new /search/jql endpoint (the old /search was deprecated)
+        let url = self.api_url("/search/jql");
         let response = self
             .client
-            .get(&url)
+            .post(&url)
             .bearer_auth(&self.access_token)
-            .query(&[("jql", jql)])
+            .json(&serde_json::json!({
+                "jql": jql,
+                "fields": ["summary", "status", "issuetype", "assignee", "description", "updated"]
+            }))
             .send()
             .await
             .context("Failed to search issues")?;
@@ -299,40 +226,6 @@ pub fn parse_user(json: &serde_json::Value) -> Option<User> {
         display_name: json["displayName"].as_str()?.to_string(),
         email_address: json["emailAddress"].as_str().map(|s| s.to_string()),
     })
-}
-
-/// Parse boards from JSON (pure function, testable)
-pub fn parse_boards(json: &serde_json::Value) -> Vec<Board> {
-    json["values"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .iter()
-        .filter_map(|b| {
-            Some(Board {
-                id: b["id"].as_u64()?,
-                name: b["name"].as_str()?.to_string(),
-                board_type: b["type"].as_str()?.to_string(),
-            })
-        })
-        .collect()
-}
-
-/// Parse sprints from JSON (pure function, testable)
-pub fn parse_sprints(json: &serde_json::Value) -> Vec<Sprint> {
-    json["values"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .iter()
-        .filter_map(|s| {
-            Some(Sprint {
-                id: s["id"].as_u64()?,
-                name: s["name"].as_str()?.to_string(),
-                state: s["state"].as_str()?.to_string(),
-                start_date: s["startDate"].as_str().map(|d| d.to_string()),
-                end_date: s["endDate"].as_str().map(|d| d.to_string()),
-            })
-        })
-        .collect()
 }
 
 /// Parse issues from JSON (pure function, testable)
@@ -495,94 +388,6 @@ mod tests {
         });
         let user = parse_user(&json);
         assert!(user.is_none());
-    }
-
-    #[test]
-    fn parse_boards_extracts_boards() {
-        let json = json!({
-            "values": [
-                {"id": 1, "name": "Board 1", "type": "scrum"},
-                {"id": 2, "name": "Board 2", "type": "kanban"}
-            ]
-        });
-        let boards = parse_boards(&json);
-        assert_eq!(boards.len(), 2);
-        assert_eq!(boards[0].id, 1);
-        assert_eq!(boards[0].name, "Board 1");
-        assert_eq!(boards[0].board_type, "scrum");
-        assert_eq!(boards[1].id, 2);
-        assert_eq!(boards[1].board_type, "kanban");
-    }
-
-    #[test]
-    fn parse_boards_handles_empty_values() {
-        let json = json!({"values": []});
-        let boards = parse_boards(&json);
-        assert!(boards.is_empty());
-    }
-
-    #[test]
-    fn parse_boards_handles_missing_values() {
-        let json = json!({});
-        let boards = parse_boards(&json);
-        assert!(boards.is_empty());
-    }
-
-    #[test]
-    fn parse_boards_skips_incomplete_entries() {
-        let json = json!({
-            "values": [
-                {"id": 1, "name": "Complete", "type": "scrum"},
-                {"id": 2, "name": "Missing Type"},
-                {"id": 3, "type": "kanban"}
-            ]
-        });
-        let boards = parse_boards(&json);
-        assert_eq!(boards.len(), 1);
-        assert_eq!(boards[0].name, "Complete");
-    }
-
-    #[test]
-    fn parse_sprints_extracts_sprints() {
-        let json = json!({
-            "values": [
-                {
-                    "id": 100,
-                    "name": "Sprint 1",
-                    "state": "active",
-                    "startDate": "2024-01-01",
-                    "endDate": "2024-01-14"
-                }
-            ]
-        });
-        let sprints = parse_sprints(&json);
-        assert_eq!(sprints.len(), 1);
-        assert_eq!(sprints[0].id, 100);
-        assert_eq!(sprints[0].name, "Sprint 1");
-        assert_eq!(sprints[0].state, "active");
-        assert_eq!(sprints[0].start_date, Some("2024-01-01".to_string()));
-    }
-
-    #[test]
-    fn parse_sprints_handles_missing_dates() {
-        let json = json!({
-            "values": [{
-                "id": 200,
-                "name": "Future Sprint",
-                "state": "future"
-            }]
-        });
-        let sprints = parse_sprints(&json);
-        assert_eq!(sprints.len(), 1);
-        assert!(sprints[0].start_date.is_none());
-        assert!(sprints[0].end_date.is_none());
-    }
-
-    #[test]
-    fn parse_sprints_handles_empty() {
-        let json = json!({"values": []});
-        let sprints = parse_sprints(&json);
-        assert!(sprints.is_empty());
     }
 
     #[test]

@@ -19,7 +19,7 @@ use super::types::OAuthConfig;
 const AUTH_URL: &str = "https://auth.atlassian.com/authorize";
 const TOKEN_URL: &str = "https://auth.atlassian.com/oauth/token";
 const RESOURCES_URL: &str = "https://api.atlassian.com/oauth/token/accessible-resources";
-const CALLBACK_PORT: u16 = 3000;
+const CALLBACK_PORT: u16 = 9876;
 const SCOPES: &str = "read:jira-work write:jira-work read:jira-user offline_access";
 
 /// OAuth callback state
@@ -69,7 +69,7 @@ pub fn generate_state() -> String {
 
 /// Build the authorization URL
 pub fn build_auth_url(client_id: &str, state: &str) -> String {
-    let redirect_uri = format!("http://127.0.0.1:{}/callback", CALLBACK_PORT);
+    let redirect_uri = format!("http://localhost:{}/callback", CALLBACK_PORT);
     format!(
         "{}?audience=api.atlassian.com&client_id={}&scope={}&redirect_uri={}&state={}&response_type=code&prompt=consent",
         AUTH_URL,
@@ -229,7 +229,7 @@ struct TokenResponse {
 /// Exchange authorization code for tokens
 async fn exchange_code(config: &OAuthConfig, code: &str) -> Result<TokenResponse> {
     let client = reqwest::Client::new();
-    let redirect_uri = format!("http://127.0.0.1:{}/callback", CALLBACK_PORT);
+    let redirect_uri = format!("http://localhost:{}/callback", CALLBACK_PORT);
 
     let response = client
         .post(TOKEN_URL)
@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn build_auth_url_contains_redirect_uri() {
         let url = build_auth_url("id", "state");
-        assert!(url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback"));
+        assert!(url.contains("redirect_uri=http%3A%2F%2Flocalhost%3A9876%2Fcallback"));
     }
 
     #[test]
