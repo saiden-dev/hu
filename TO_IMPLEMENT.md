@@ -139,7 +139,7 @@ hu utils fetch-html/grep/web-search/docs-index/docs-search/docs-section
 hu dashboard show/refresh
 hu eks list/exec/logs
 hu slack messages/channels/send
-hu pagerduty oncall/alerts/incidents
-hu sentry issues/show
-hu newrelic incidents/query
+hu pagerduty config/auth/oncall/alerts/incidents/show/whoami
+hu sentry config/auth/issues/show/events
+hu newrelic config/incidents/issues/query
 ```
