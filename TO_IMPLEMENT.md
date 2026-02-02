@@ -138,6 +138,7 @@ hu jira auth/tickets/sprint/search/show/update
 hu utils fetch-html/grep/web-search/docs-index/docs-search/docs-section
 hu dashboard show/refresh
 hu eks list/exec/logs
+hu pipeline list/status/history
 hu slack messages/channels/send
 hu pagerduty config/auth/oncall/alerts/incidents/show/whoami
 hu sentry config/auth/issues/show/events
