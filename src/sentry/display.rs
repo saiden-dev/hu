@@ -394,4 +394,130 @@ mod tests {
         let result = output_events(&events, OutputFormat::Json);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_output_issue_detail_empty_metadata() {
+        // Test with empty culprit and empty metadata fields
+        let issue = Issue {
+            id: "12345".to_string(),
+            short_id: "PROJ-456".to_string(),
+            title: "Test error".to_string(),
+            culprit: "".to_string(), // empty culprit
+            level: "warning".to_string(),
+            status: "resolved".to_string(),
+            platform: "python".to_string(),
+            count: "1".to_string(),
+            user_count: 1,
+            first_seen: chrono::Utc::now().to_rfc3339(),
+            last_seen: chrono::Utc::now().to_rfc3339(),
+            permalink: "https://sentry.io/issue/456".to_string(),
+            is_subscribed: false,
+            is_bookmarked: false,
+            project: ProjectInfo {
+                id: "2".to_string(),
+                name: "Other Project".to_string(),
+                slug: "other-project".to_string(),
+            },
+            metadata: IssueMetadata {
+                error_type: "".to_string(), // empty
+                value: "".to_string(),      // empty
+                filename: "".to_string(),   // empty
+                function: "".to_string(),   // empty
+            },
+        };
+        let result = output_issue_detail(&issue, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_issue_detail_partial_metadata() {
+        // Test with only some metadata fields populated
+        let issue = Issue {
+            id: "12345".to_string(),
+            short_id: "PROJ-789".to_string(),
+            title: "Partial metadata".to_string(),
+            culprit: "some/path.py".to_string(),
+            level: "error".to_string(),
+            status: "unresolved".to_string(),
+            platform: "python".to_string(),
+            count: "5".to_string(),
+            user_count: 3,
+            first_seen: chrono::Utc::now().to_rfc3339(),
+            last_seen: chrono::Utc::now().to_rfc3339(),
+            permalink: "https://sentry.io/issue/789".to_string(),
+            is_subscribed: false,
+            is_bookmarked: false,
+            project: ProjectInfo {
+                id: "3".to_string(),
+                name: "Third Project".to_string(),
+                slug: "third-project".to_string(),
+            },
+            metadata: IssueMetadata {
+                error_type: "ValueError".to_string(),
+                value: "".to_string(), // empty value
+                filename: "".to_string(),
+                function: "process_data".to_string(),
+            },
+        };
+        let result = output_issue_detail(&issue, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_events_user_variants() {
+        // Test event with username instead of email
+        let events = vec![
+            Event {
+                id: "event1234567890".to_string(),
+                title: "Event with username".to_string(),
+                message: "Has message".to_string(),
+                platform: "rust".to_string(),
+                date_created: Some(chrono::Utc::now().to_rfc3339()),
+                user: Some(EventUser {
+                    id: None,
+                    email: None,
+                    username: Some("testuser".to_string()),
+                    ip_address: None,
+                }),
+                tags: vec![],
+            },
+            Event {
+                id: "event2".to_string(), // short ID
+                title: "Event with only id".to_string(),
+                message: "".to_string(), // empty message - should use title
+                platform: "rust".to_string(),
+                date_created: Some(chrono::Utc::now().to_rfc3339()),
+                user: Some(EventUser {
+                    id: Some("user-id-only".to_string()),
+                    email: None,
+                    username: None,
+                    ip_address: None,
+                }),
+                tags: vec![],
+            },
+        ];
+        let result = output_events(&events, OutputFormat::Table);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_output_config_status() {
+        use crate::sentry::config::SentryConfig;
+
+        // Test with all fields set
+        let config = SentryConfig {
+            auth_token: Some("test-token".to_string()),
+            organization: Some("my-org".to_string()),
+            project: Some("my-project".to_string()),
+        };
+        output_config_status(&config);
+
+        // Test with no fields set
+        let empty_config = SentryConfig {
+            auth_token: None,
+            organization: None,
+            project: None,
+        };
+        output_config_status(&empty_config);
+    }
 }
