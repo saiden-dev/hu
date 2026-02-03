@@ -415,4 +415,22 @@ mod tests {
         let result = load_index("/nonexistent/index.json");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn build_index_skips_hidden_dirs() {
+        let tmp_dir = create_test_docs("hidden");
+
+        // Create a hidden directory with a markdown file
+        let hidden_dir = tmp_dir.join(".hidden");
+        std::fs::create_dir_all(&hidden_dir).unwrap();
+        std::fs::write(hidden_dir.join("secret.md"), "# Secret\n\nHidden content.\n").unwrap();
+
+        let index = build_index(tmp_dir.to_str().unwrap()).unwrap();
+
+        // Should have 2 files (README.md and docs/api.md) but not .hidden/secret.md
+        assert_eq!(index.file_count(), 2);
+        assert!(!index.files.contains_key(".hidden/secret.md"));
+
+        cleanup_test_docs(&tmp_dir);
+    }
 }
