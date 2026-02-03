@@ -264,4 +264,34 @@ mod tests {
         let output = process_sprint(&client).await.unwrap();
         assert!(output.contains("No issues in active sprints"));
     }
+
+    #[test]
+    fn format_sprint_output_handles_unknown_status() {
+        // Test that unknown statuses (not in status_order) are still displayed
+        let issues = vec![
+            Issue {
+                key: "A-1".to_string(),
+                summary: "Task with custom status".to_string(),
+                status: "Custom Status".to_string(),
+                issue_type: "Task".to_string(),
+                assignee: Some("Alice".to_string()),
+                description: None,
+                updated: "2024-01-01T00:00:00Z".to_string(),
+            },
+            Issue {
+                key: "A-2".to_string(),
+                summary: "Task with another status".to_string(),
+                status: "Another Custom".to_string(),
+                issue_type: "Task".to_string(),
+                assignee: None,
+                description: None,
+                updated: "2024-01-01T00:00:00Z".to_string(),
+            },
+        ];
+        let output = format_sprint_output(&issues);
+        assert!(output.contains("Custom Status"));
+        assert!(output.contains("A-1"));
+        assert!(output.contains("Another Custom"));
+        assert!(output.contains("A-2"));
+    }
 }
