@@ -478,6 +478,14 @@ mod tests {
     }
 
     #[test]
+    fn test_format_time_out_of_range() {
+        // Timestamp so large that DateTime::from_timestamp returns None
+        // i64::MAX / 1000 = ~292 billion years, way beyond chrono's range
+        let result = format_time(Some(i64::MAX));
+        assert_eq!(result, "-");
+    }
+
+    #[test]
     fn test_format_json_value_object() {
         let obj = serde_json::json!({"key": "value"});
         let formatted = format_json_value(&obj);
