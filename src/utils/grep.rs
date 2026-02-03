@@ -1105,4 +1105,34 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
+
+    // Tests for signature extraction None paths (lines 371, 408, 429, 451)
+
+    #[test]
+    fn extract_python_signature_no_match() {
+        // Plain text that doesn't match def/class/async patterns
+        let result = extract_python_signature("just some regular text");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_js_signature_no_match() {
+        // Plain text that doesn't match function/class/arrow patterns
+        let result = extract_js_signature("console.log('hello')");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_ruby_signature_no_match() {
+        // Plain text that doesn't match def/class patterns
+        let result = extract_ruby_signature("puts 'hello world'");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_go_signature_no_match() {
+        // Plain text that doesn't match func/type patterns
+        let result = extract_go_signature("fmt.Println(\"hello\")");
+        assert!(result.is_none());
+    }
 }
