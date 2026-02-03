@@ -6,12 +6,8 @@ pub enum GhCommand {
     Login(LoginArgs),
     /// List open pull requests authored by you
     Prs,
-    /// List workflow runs
-    Runs,
     /// Extract test failures from CI
     Failures(FailuresArgs),
-    /// Check CI status
-    Ci,
 }
 
 #[derive(Debug, Args)]

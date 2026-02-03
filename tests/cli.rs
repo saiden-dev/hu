@@ -226,9 +226,7 @@ fn gh_help_shows_subcommands() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("login"));
     assert!(stdout.contains("prs"));
-    assert!(stdout.contains("runs"));
     assert!(stdout.contains("failures"));
-    assert!(stdout.contains("ci"));
 }
 
 #[test]
@@ -241,26 +239,6 @@ fn gh_failures_help() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--pr"));
     assert!(stdout.contains("--repo"));
-}
-
-#[test]
-fn gh_runs_executes() {
-    let output = hu()
-        .args(["gh", "runs"])
-        .output()
-        .expect("failed to execute");
-    // This returns "not yet implemented" but exits successfully
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("not yet implemented"));
-}
-
-#[test]
-fn gh_ci_executes() {
-    let output = hu().args(["gh", "ci"]).output().expect("failed to execute");
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("not yet implemented"));
 }
 
 #[test]
