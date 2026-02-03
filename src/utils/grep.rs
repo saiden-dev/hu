@@ -730,6 +730,338 @@ mod tests {
     }
 
     #[test]
+    fn format_matches_signature_mode() {
+        let matches = vec![GrepMatch {
+            file: "src/main.rs".to_string(),
+            line_num: 42,
+            content: "pub fn process() {".to_string(),
+            match_count: 1,
+        }];
+        let args = GrepArgs {
+            pattern: "process".to_string(),
+            path: ".".to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: true,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+        let output = format_matches(&matches, &args);
+        assert!(output.contains("pub fn process()"));
+        assert!(!output.contains("{")); // signature strips the brace
+    }
+
+    #[test]
+    fn format_matches_signature_no_match() {
+        // When line doesn't match signature pattern, falls back to trimmed content
+        let matches = vec![GrepMatch {
+            file: "src/main.rs".to_string(),
+            line_num: 42,
+            content: "    let x = 1;".to_string(),
+            match_count: 1,
+        }];
+        let args = GrepArgs {
+            pattern: "x".to_string(),
+            path: ".".to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: true,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+        let output = format_matches(&matches, &args);
+        assert!(output.contains("let x = 1;"));
+    }
+
+    #[test]
+    fn extract_signature_unknown_extension() {
+        let result = extract_signature("some random line", "file.xyz");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_js_class_signature() {
+        let sig = extract_js_signature("export class UserService extends BaseService {").unwrap();
+        assert!(sig.contains("class UserService"));
+        assert!(sig.contains("extends BaseService"));
+    }
+
+    #[test]
+    fn extract_ruby_class_with_inheritance() {
+        let sig = extract_ruby_signature("class User < ActiveRecord::Base").unwrap();
+        assert!(sig.contains("class User"));
+    }
+
+    #[test]
+    fn extract_go_type_interface() {
+        let sig = extract_go_signature("type Handler interface {").unwrap();
+        assert_eq!(sig, "type Handler interface");
+    }
+
+    #[test]
+    fn extract_python_async_def() {
+        let sig = extract_python_signature("async def fetch_data(url: str) -> dict:").unwrap();
+        assert!(sig.contains("async def fetch_data"));
+    }
+
+    #[test]
+    fn should_search_file_binary_extension() {
+        let path = std::path::Path::new("image.png");
+        assert!(!should_search_file(path, None));
+    }
+
+    #[test]
+    fn should_search_file_text_no_glob() {
+        let path = std::path::Path::new("file.txt");
+        assert!(should_search_file(path, None));
+    }
+
+    #[test]
+    fn grep_match_debug() {
+        let m = GrepMatch {
+            file: "test.rs".to_string(),
+            line_num: 1,
+            content: "test".to_string(),
+            match_count: 1,
+        };
+        let debug = format!("{:?}", m);
+        assert!(debug.contains("GrepMatch"));
+    }
+
+    #[test]
+    fn grep_match_clone() {
+        let m = GrepMatch {
+            file: "test.rs".to_string(),
+            line_num: 1,
+            content: "test".to_string(),
+            match_count: 1,
+        };
+        let cloned = m.clone();
+        assert_eq!(cloned.file, m.file);
+        assert_eq!(cloned.line_num, m.line_num);
+    }
+
+    #[test]
+    fn search_files_with_unique() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_unique_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create files with duplicate content
+        std::fs::write(temp_dir.join("a.txt"), "let x = 1;\n").unwrap();
+        std::fs::write(temp_dir.join("b.txt"), "let x = 1;\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "let".to_string(),
+            path: temp_dir.to_str().unwrap().to_string(),
+            refs: false,
+            unique: true,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let matches = search_files(&args).unwrap();
+        // Should dedupe to 1 match with combined count
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].match_count, 2);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn search_files_with_ranked() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_ranked_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        std::fs::write(temp_dir.join("a.txt"), "test\n").unwrap();
+        std::fs::write(temp_dir.join("b.txt"), "test test test\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: temp_dir.to_str().unwrap().to_string(),
+            refs: false,
+            unique: false,
+            ranked: true,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let matches = search_files(&args).unwrap();
+        // First match should have higher count
+        assert!(matches[0].match_count >= matches[1].match_count);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn collect_matches_skips_hidden() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_hidden_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(temp_dir.join(".hidden")).unwrap();
+
+        std::fs::write(temp_dir.join("visible.txt"), "test\n").unwrap();
+        std::fs::write(temp_dir.join(".hidden").join("secret.txt"), "test\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: temp_dir.to_str().unwrap().to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false, // Don't include hidden
+        };
+
+        let matches = search_files(&args).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert!(matches[0].file.contains("visible"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn collect_matches_includes_hidden_when_requested() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_hidden_incl_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        std::fs::write(temp_dir.join(".hidden_file.txt"), "test\n").unwrap();
+        std::fs::write(temp_dir.join("visible.txt"), "test\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: temp_dir.to_str().unwrap().to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: true, // Include hidden
+        };
+
+        let matches = search_files(&args).unwrap();
+        assert_eq!(matches.len(), 2);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn search_files_skips_ignored_dirs() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_ignored_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(temp_dir.join("node_modules")).unwrap();
+
+        std::fs::write(temp_dir.join("app.js"), "test\n").unwrap();
+        std::fs::write(temp_dir.join("node_modules").join("dep.js"), "test\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: temp_dir.to_str().unwrap().to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let matches = search_files(&args).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert!(matches[0].file.contains("app.js"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn search_files_single_file_path() {
+        let temp_dir = std::env::temp_dir().join("hu_grep_single_file_test");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let file_path = temp_dir.join("single.txt");
+        std::fs::write(&file_path, "test line\n").unwrap();
+
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: file_path.to_str().unwrap().to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let matches = search_files(&args).unwrap();
+        assert_eq!(matches.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn search_files_nonexistent_path() {
+        let args = GrepArgs {
+            pattern: "test".to_string(),
+            path: "/nonexistent/path/12345".to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let matches = search_files(&args).unwrap();
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn search_files_invalid_regex() {
+        let args = GrepArgs {
+            pattern: "[invalid".to_string(), // Invalid regex
+            path: ".".to_string(),
+            refs: false,
+            unique: false,
+            ranked: false,
+            limit: None,
+            signature: false,
+            glob: None,
+            ignore_case: false,
+            hidden: false,
+        };
+
+        let result = search_files(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn search_files_case_insensitive() {
         let temp_dir = std::env::temp_dir().join("hu_grep_case_test");
         let _ = std::fs::remove_dir_all(&temp_dir);
