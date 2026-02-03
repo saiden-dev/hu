@@ -562,4 +562,35 @@ mod tests {
         assert!(parsed.brave.is_some());
         assert_eq!(parsed.brave.unwrap().api_key, "brave");
     }
+
+    #[test]
+    fn save_credentials_and_load_integration() {
+        // Integration test: save and load using actual config path
+        // First load existing to preserve it
+        let original = load_credentials().ok();
+
+        // Save test credentials
+        let test_creds = Credentials {
+            github: Some(GithubCredentials {
+                token: "integration_test_token".to_string(),
+                username: "integration_test_user".to_string(),
+            }),
+            jira: None,
+            brave: None,
+        };
+        save_credentials(&test_creds).unwrap();
+
+        // Load and verify
+        let loaded = load_credentials().unwrap();
+        assert!(loaded.github.is_some());
+        assert_eq!(
+            loaded.github.as_ref().unwrap().token,
+            "integration_test_token"
+        );
+
+        // Restore original if it existed, or save empty
+        if let Some(orig) = original {
+            save_credentials(&orig).unwrap();
+        }
+    }
 }
