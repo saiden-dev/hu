@@ -262,6 +262,25 @@ escalation_policy_ids = ["EP1"]
     }
 
     #[test]
+    fn load_config_env_override() {
+        // Test that environment variable overrides config file
+        // Save current value and restore after test
+        let original = std::env::var("PAGERDUTY_API_TOKEN").ok();
+
+        std::env::set_var("PAGERDUTY_API_TOKEN", "env-token-test-12345");
+        let result = load_config();
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.api_token.as_deref(), Some("env-token-test-12345"));
+
+        // Restore original value
+        match original {
+            Some(val) => std::env::set_var("PAGERDUTY_API_TOKEN", val),
+            None => std::env::remove_var("PAGERDUTY_API_TOKEN"),
+        }
+    }
+
+    #[test]
     fn parse_config_invalid_toml() {
         let invalid = "this is not valid [[[toml";
         let result = parse_config(invalid);
