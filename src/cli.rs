@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::context::ContextCommand;
+use crate::data::DataCommand;
 use crate::eks::EksCommand;
 use crate::gh::GhCommand;
 use crate::jira::JiraCommand;
@@ -87,4 +88,10 @@ pub enum Command {
 
     /// Smart file reading (outline, interface, around, diff)
     Read(ReadArgs),
+
+    /// Claude Code session data (sync, stats, search)
+    Data {
+        #[command(subcommand)]
+        cmd: Option<DataCommand>,
+    },
 }

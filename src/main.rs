@@ -2,6 +2,7 @@ use clap::{CommandFactory, Parser};
 
 mod cli;
 mod context;
+mod data;
 mod eks;
 mod gh;
 mod jira;
@@ -94,6 +95,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Read(args) => {
             return read::run(args);
+        }
+        Command::Data { cmd: Some(cmd) } => {
+            return data::run_command(cmd).await;
+        }
+        Command::Data { cmd: None } => {
+            print_subcommand_help("data")?;
         }
     }
     Ok(())
