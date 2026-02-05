@@ -6,6 +6,7 @@ mod fix;
 mod helpers;
 mod login;
 mod prs;
+mod runs;
 mod types;
 
 pub use cli::GhCommand;
@@ -16,6 +17,7 @@ pub async fn run_command(cmd: GhCommand) -> anyhow::Result<()> {
         GhCommand::Prs => prs::run().await,
         GhCommand::Failures(args) => failures::run(args).await,
         GhCommand::Fix(args) => fix::run(args).await,
+        GhCommand::Runs(args) => runs::run(args).await,
     }
 }
 

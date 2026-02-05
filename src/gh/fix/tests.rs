@@ -54,6 +54,22 @@ impl GithubApi for MockGithubApi {
     ) -> Result<Option<u64>> {
         Ok(self.pr_for_branch)
     }
+
+    async fn list_workflow_runs(
+        &self,
+        _query: &crate::gh::types::RunsQuery<'_>,
+    ) -> Result<Vec<crate::gh::types::WorkflowRun>> {
+        Ok(vec![])
+    }
+
+    async fn search_prs_by_title(
+        &self,
+        _owner: &str,
+        _repo: &str,
+        _query: &str,
+    ) -> Result<Vec<PullRequest>> {
+        Ok(vec![])
+    }
 }
 
 fn query(owner: &str, repo: &str) -> FixQuery {
@@ -290,6 +306,22 @@ impl GithubApi for MockGithubApiWithLogError {
         _branch: &str,
     ) -> Result<Option<u64>> {
         Ok(self.pr_for_branch)
+    }
+
+    async fn list_workflow_runs(
+        &self,
+        _query: &crate::gh::types::RunsQuery<'_>,
+    ) -> Result<Vec<crate::gh::types::WorkflowRun>> {
+        Ok(vec![])
+    }
+
+    async fn search_prs_by_title(
+        &self,
+        _owner: &str,
+        _repo: &str,
+        _query: &str,
+    ) -> Result<Vec<PullRequest>> {
+        Ok(vec![])
     }
 }
 

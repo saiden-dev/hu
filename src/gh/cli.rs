@@ -10,6 +10,8 @@ pub enum GhCommand {
     Failures(FailuresArgs),
     /// Analyze CI failures and output investigation context
     Fix(FixArgs),
+    /// List workflow runs
+    Runs(RunsArgs),
 }
 
 #[derive(Debug, Args)]
@@ -43,6 +45,27 @@ pub struct FixArgs {
     /// Repository in owner/repo format
     #[arg(long, short)]
     pub repo: Option<String>,
+    /// Output as JSON
+    #[arg(long, short)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct RunsArgs {
+    /// Ticket key to find runs for (e.g. BFR-1234)
+    pub ticket: Option<String>,
+    /// Filter by status: queued, in_progress, completed, success, failure
+    #[arg(long, short)]
+    pub status: Option<String>,
+    /// Filter by branch name
+    #[arg(long, short)]
+    pub branch: Option<String>,
+    /// Repository in owner/repo format
+    #[arg(long, short)]
+    pub repo: Option<String>,
+    /// Max results (default: 20)
+    #[arg(long, short = 'n', default_value = "20")]
+    pub limit: usize,
     /// Output as JSON
     #[arg(long, short)]
     pub json: bool,

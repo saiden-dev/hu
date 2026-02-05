@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use octocrab::Octocrab;
 
 use super::auth::get_token;
-use super::types::{CiStatus, PullRequest};
+use super::types::{CiStatus, PullRequest, RunsQuery, WorkflowRun};
 
 mod parsing;
 
@@ -65,6 +65,20 @@ pub trait GithubApi: Send + Sync {
         repo: &str,
         branch: &str,
     ) -> impl std::future::Future<Output = Result<Option<u64>>> + Send;
+
+    /// List workflow runs for a repository
+    fn list_workflow_runs(
+        &self,
+        query: &RunsQuery<'_>,
+    ) -> impl std::future::Future<Output = Result<Vec<WorkflowRun>>> + Send;
+
+    /// Search PRs by title/branch containing a query string
+    fn search_prs_by_title(
+        &self,
+        owner: &str,
+        repo: &str,
+        query: &str,
+    ) -> impl std::future::Future<Output = Result<Vec<PullRequest>>> + Send;
 }
 
 /// Parse CI status from GitHub API responses (pure function, testable)
@@ -136,6 +150,59 @@ pub fn extract_run_id(runs: &serde_json::Value) -> Option<u64> {
         .as_array()
         .and_then(|arr| arr.first())
         .and_then(|r| r["id"].as_u64())
+}
+
+/// Extract workflow runs from GitHub API response (pure function, testable)
+pub fn extract_workflow_runs(response: &serde_json::Value) -> Vec<WorkflowRun> {
+    response["workflow_runs"]
+        .as_array()
+        .unwrap_or(&vec![])
+        .iter()
+        .filter_map(|r| {
+            Some(WorkflowRun {
+                id: r["id"].as_u64()?,
+                name: r["name"].as_str()?.to_string(),
+                status: r["status"].as_str().unwrap_or("unknown").to_string(),
+                conclusion: r["conclusion"].as_str().map(|s| s.to_string()),
+                branch: r["head_branch"].as_str().unwrap_or("").to_string(),
+                html_url: r["html_url"].as_str().unwrap_or("").to_string(),
+                created_at: r["created_at"].as_str().unwrap_or("").to_string(),
+                updated_at: r["updated_at"].as_str().unwrap_or("").to_string(),
+                run_number: r["run_number"].as_u64().unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
+/// Extract PRs matching a query from GitHub PR list response (pure function, testable)
+pub fn extract_matching_prs(response: &serde_json::Value, query: &str) -> Vec<PullRequest> {
+    let query_lower = query.to_lowercase();
+    response
+        .as_array()
+        .unwrap_or(&vec![])
+        .iter()
+        .filter(|pr| {
+            let title = pr["title"].as_str().unwrap_or("").to_lowercase();
+            let branch = pr["head"]["ref"].as_str().unwrap_or("").to_lowercase();
+            title.contains(&query_lower) || branch.contains(&query_lower)
+        })
+        .filter_map(|pr| {
+            let repo_full_name = pr["base"]["repo"]["full_name"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            Some(PullRequest {
+                number: pr["number"].as_u64()?,
+                title: pr["title"].as_str()?.to_string(),
+                html_url: pr["html_url"].as_str().unwrap_or("").to_string(),
+                state: pr["state"].as_str().unwrap_or("").to_string(),
+                repo_full_name,
+                created_at: pr["created_at"].as_str().unwrap_or("").to_string(),
+                updated_at: pr["updated_at"].as_str().unwrap_or("").to_string(),
+                ci_status: None,
+            })
+        })
+        .collect()
 }
 
 pub struct GithubClient {
@@ -345,5 +412,44 @@ impl GithubApi for GithubClient {
             .context("Failed to search for PR by branch")?;
 
         Ok(extract_pr_number_from_list(&prs))
+    }
+
+    async fn list_workflow_runs(&self, query: &RunsQuery<'_>) -> Result<Vec<WorkflowRun>> {
+        let mut url = format!(
+            "/repos/{}/{}/actions/runs?per_page={}",
+            query.owner, query.repo, query.limit
+        );
+        if let Some(b) = query.branch {
+            url.push_str(&format!("&branch={}", b));
+        }
+        if let Some(s) = query.status {
+            url.push_str(&format!("&status={}", s));
+        }
+
+        let response: serde_json::Value = self
+            .client
+            .get(url, None::<&()>)
+            .await
+            .context("Failed to list workflow runs")?;
+
+        Ok(extract_workflow_runs(&response))
+    }
+
+    async fn search_prs_by_title(
+        &self,
+        owner: &str,
+        repo: &str,
+        query: &str,
+    ) -> Result<Vec<PullRequest>> {
+        let response: serde_json::Value = self
+            .client
+            .get(
+                format!("/repos/{}/{}/pulls?state=all&per_page=100", owner, repo),
+                None::<&()>,
+            )
+            .await
+            .context("Failed to list PRs for search")?;
+
+        Ok(extract_matching_prs(&response, query))
     }
 }

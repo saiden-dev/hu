@@ -24,6 +24,30 @@ pub struct PullRequest {
     pub ci_status: Option<CiStatus>,
 }
 
+/// A GitHub Actions workflow run
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowRun {
+    pub id: u64,
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub branch: String,
+    pub html_url: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub run_number: u64,
+}
+
+/// Parameters for listing workflow runs
+#[derive(Debug, Clone, Default)]
+pub struct RunsQuery<'a> {
+    pub owner: &'a str,
+    pub repo: &'a str,
+    pub branch: Option<&'a str>,
+    pub status: Option<&'a str>,
+    pub limit: usize,
+}
+
 /// A test failure extracted from CI logs
 #[derive(Debug, Clone)]
 pub struct TestFailure {
@@ -258,6 +282,116 @@ mod tests {
         };
         let d = format!("{:?}", r);
         assert!(d.contains("FixReport"));
+    }
+
+    #[test]
+    fn workflow_run_serializes() {
+        let run = WorkflowRun {
+            id: 100,
+            name: "Test Suite".to_string(),
+            status: "completed".to_string(),
+            conclusion: Some("success".to_string()),
+            branch: "main".to_string(),
+            html_url: "https://github.com/o/r/actions/runs/100".to_string(),
+            created_at: "2024-01-15T10:00:00Z".to_string(),
+            updated_at: "2024-01-15T10:05:00Z".to_string(),
+            run_number: 42,
+        };
+        let json = serde_json::to_string(&run).unwrap();
+        assert!(json.contains("Test Suite"));
+        assert!(json.contains("100"));
+        assert!(json.contains("main"));
+    }
+
+    #[test]
+    fn workflow_run_deserializes() {
+        let json = r#"{
+            "id": 200,
+            "name": "Lint",
+            "status": "in_progress",
+            "conclusion": null,
+            "branch": "feature",
+            "html_url": "https://github.com/o/r/actions/runs/200",
+            "created_at": "2024-01-15T10:00:00Z",
+            "updated_at": "2024-01-15T10:05:00Z",
+            "run_number": 7
+        }"#;
+        let run: WorkflowRun = serde_json::from_str(json).unwrap();
+        assert_eq!(run.id, 200);
+        assert_eq!(run.name, "Lint");
+        assert!(run.conclusion.is_none());
+    }
+
+    #[test]
+    fn workflow_run_clone() {
+        let run = WorkflowRun {
+            id: 1,
+            name: "CI".to_string(),
+            status: "completed".to_string(),
+            conclusion: Some("failure".to_string()),
+            branch: "dev".to_string(),
+            html_url: "u".to_string(),
+            created_at: "c".to_string(),
+            updated_at: "u".to_string(),
+            run_number: 1,
+        };
+        let cloned = run.clone();
+        assert_eq!(cloned.id, run.id);
+        assert_eq!(cloned.conclusion, run.conclusion);
+    }
+
+    #[test]
+    fn runs_query_debug() {
+        let q = RunsQuery {
+            owner: "o",
+            repo: "r",
+            branch: Some("main"),
+            status: None,
+            limit: 20,
+        };
+        let d = format!("{:?}", q);
+        assert!(d.contains("RunsQuery"));
+    }
+
+    #[test]
+    fn runs_query_clone() {
+        let q = RunsQuery {
+            owner: "o",
+            repo: "r",
+            branch: None,
+            status: Some("completed"),
+            limit: 10,
+        };
+        let c = q.clone();
+        assert_eq!(c.owner, q.owner);
+        assert_eq!(c.limit, q.limit);
+    }
+
+    #[test]
+    fn runs_query_default() {
+        let q = RunsQuery::default();
+        assert_eq!(q.owner, "");
+        assert_eq!(q.repo, "");
+        assert!(q.branch.is_none());
+        assert!(q.status.is_none());
+        assert_eq!(q.limit, 0);
+    }
+
+    #[test]
+    fn workflow_run_debug() {
+        let run = WorkflowRun {
+            id: 1,
+            name: "N".to_string(),
+            status: "s".to_string(),
+            conclusion: None,
+            branch: "b".to_string(),
+            html_url: "u".to_string(),
+            created_at: "c".to_string(),
+            updated_at: "u".to_string(),
+            run_number: 1,
+        };
+        let d = format!("{:?}", run);
+        assert!(d.contains("WorkflowRun"));
     }
 
     #[test]

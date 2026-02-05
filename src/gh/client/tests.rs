@@ -334,6 +334,181 @@ rspec ./spec/features/admin/users/permissions_spec.rb:42 # Deep path test
     );
 }
 
+// extract_workflow_runs tests
+#[test]
+fn extract_workflow_runs_valid_response() {
+    let response = json!({
+        "workflow_runs": [
+            {
+                "id": 100,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "head_branch": "main",
+                "html_url": "https://github.com/o/r/actions/runs/100",
+                "created_at": "2024-01-15T10:00:00Z",
+                "updated_at": "2024-01-15T10:05:00Z",
+                "run_number": 42
+            },
+            {
+                "id": 101,
+                "name": "Lint",
+                "status": "in_progress",
+                "conclusion": null,
+                "head_branch": "feature",
+                "html_url": "https://github.com/o/r/actions/runs/101",
+                "created_at": "2024-01-15T11:00:00Z",
+                "updated_at": "2024-01-15T11:01:00Z",
+                "run_number": 43
+            }
+        ]
+    });
+    let runs = extract_workflow_runs(&response);
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].id, 100);
+    assert_eq!(runs[0].name, "CI");
+    assert_eq!(runs[0].conclusion, Some("success".to_string()));
+    assert_eq!(runs[0].branch, "main");
+    assert_eq!(runs[1].id, 101);
+    assert!(runs[1].conclusion.is_none());
+}
+
+#[test]
+fn extract_workflow_runs_empty() {
+    let response = json!({"workflow_runs": []});
+    assert!(extract_workflow_runs(&response).is_empty());
+}
+
+#[test]
+fn extract_workflow_runs_missing_key() {
+    let response = json!({});
+    assert!(extract_workflow_runs(&response).is_empty());
+}
+
+#[test]
+fn extract_workflow_runs_skips_invalid() {
+    let response = json!({
+        "workflow_runs": [
+            {"name": "no id"},
+            {
+                "id": 100,
+                "name": "Valid",
+                "status": "completed",
+                "conclusion": "success",
+                "head_branch": "main",
+                "html_url": "url",
+                "created_at": "c",
+                "updated_at": "u",
+                "run_number": 1
+            }
+        ]
+    });
+    let runs = extract_workflow_runs(&response);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].id, 100);
+}
+
+#[test]
+fn extract_workflow_runs_null_runs() {
+    let response = json!({"workflow_runs": null});
+    assert!(extract_workflow_runs(&response).is_empty());
+}
+
+// extract_matching_prs tests
+#[test]
+fn extract_matching_prs_by_title() {
+    let response = json!([
+        {
+            "number": 1,
+            "title": "BFR-1234 Fix login",
+            "html_url": "https://github.com/o/r/pull/1",
+            "state": "open",
+            "head": {"ref": "some-branch"},
+            "base": {"repo": {"full_name": "o/r"}},
+            "created_at": "c",
+            "updated_at": "u"
+        },
+        {
+            "number": 2,
+            "title": "Unrelated change",
+            "html_url": "https://github.com/o/r/pull/2",
+            "state": "open",
+            "head": {"ref": "other"},
+            "base": {"repo": {"full_name": "o/r"}},
+            "created_at": "c",
+            "updated_at": "u"
+        }
+    ]);
+    let prs = extract_matching_prs(&response, "BFR-1234");
+    assert_eq!(prs.len(), 1);
+    assert_eq!(prs[0].number, 1);
+}
+
+#[test]
+fn extract_matching_prs_by_branch() {
+    let response = json!([
+        {
+            "number": 1,
+            "title": "Some PR",
+            "html_url": "url",
+            "state": "open",
+            "head": {"ref": "bfr-1234-fix"},
+            "base": {"repo": {"full_name": "o/r"}},
+            "created_at": "c",
+            "updated_at": "u"
+        }
+    ]);
+    let prs = extract_matching_prs(&response, "BFR-1234");
+    assert_eq!(prs.len(), 1);
+}
+
+#[test]
+fn extract_matching_prs_empty() {
+    let response = json!([]);
+    assert!(extract_matching_prs(&response, "BFR-1234").is_empty());
+}
+
+#[test]
+fn extract_matching_prs_no_match() {
+    let response = json!([
+        {
+            "number": 1,
+            "title": "Unrelated",
+            "html_url": "url",
+            "state": "open",
+            "head": {"ref": "other"},
+            "base": {"repo": {"full_name": "o/r"}},
+            "created_at": "c",
+            "updated_at": "u"
+        }
+    ]);
+    assert!(extract_matching_prs(&response, "BFR-999").is_empty());
+}
+
+#[test]
+fn extract_matching_prs_not_array() {
+    let response = json!({"not": "array"});
+    assert!(extract_matching_prs(&response, "query").is_empty());
+}
+
+#[test]
+fn extract_matching_prs_case_insensitive() {
+    let response = json!([
+        {
+            "number": 1,
+            "title": "bfr-1234 lowercase",
+            "html_url": "url",
+            "state": "open",
+            "head": {"ref": "main"},
+            "base": {"repo": {"full_name": "o/r"}},
+            "created_at": "c",
+            "updated_at": "u"
+        }
+    ]);
+    let prs = extract_matching_prs(&response, "BFR-1234");
+    assert_eq!(prs.len(), 1);
+}
+
 #[test]
 fn clean_ci_line_various_timestamps() {
     // Different timestamp formats from CI
