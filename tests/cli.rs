@@ -232,6 +232,20 @@ fn gh_failures_help() {
 }
 
 #[test]
+fn gh_fix_help() {
+    let output = hu()
+        .args(["gh", "fix", "--help"])
+        .output()
+        .expect("failed to execute");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--pr"));
+    assert!(stdout.contains("--run"));
+    assert!(stdout.contains("--branch"));
+    assert!(stdout.contains("--json"));
+}
+
+#[test]
 fn gh_login_requires_token() {
     let output = hu()
         .args(["gh", "login"])

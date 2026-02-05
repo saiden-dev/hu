@@ -57,6 +57,14 @@ pub trait GithubApi: Send + Sync {
         repo: &str,
         job_id: u64,
     ) -> impl std::future::Future<Output = Result<String>> + Send;
+
+    /// Find PR number for a branch
+    fn find_pr_for_branch(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+    ) -> impl std::future::Future<Output = Result<Option<u64>>> + Send;
 }
 
 /// Parse CI status from GitHub API responses (pure function, testable)
@@ -113,6 +121,13 @@ pub fn extract_failed_jobs(jobs: &serde_json::Value) -> Vec<(u64, String)> {
             Some((id, name))
         })
         .collect()
+}
+
+/// Extract PR number from pull request list response (pure function, testable)
+pub fn extract_pr_number_from_list(prs: &serde_json::Value) -> Option<u64> {
+    prs.as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|pr| pr["number"].as_u64())
 }
 
 /// Extract run ID from workflow runs response (pure function, testable)
@@ -309,5 +324,26 @@ impl GithubApi for GithubClient {
         let logs = response.text().await.context("Failed to read job logs")?;
 
         Ok(logs)
+    }
+
+    async fn find_pr_for_branch(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+    ) -> Result<Option<u64>> {
+        let prs: serde_json::Value = self
+            .client
+            .get(
+                format!(
+                    "/repos/{}/{}/pulls?head={}:{}&state=open&per_page=1",
+                    owner, repo, owner, branch
+                ),
+                None::<&()>,
+            )
+            .await
+            .context("Failed to search for PR by branch")?;
+
+        Ok(extract_pr_number_from_list(&prs))
     }
 }

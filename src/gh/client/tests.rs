@@ -119,6 +119,43 @@ fn extract_run_id_missing_key() {
     assert_eq!(extract_run_id(&runs), None);
 }
 
+// extract_pr_number_from_list tests
+#[test]
+fn extract_pr_number_from_list_finds_first() {
+    let prs = json!([{"number": 42}, {"number": 99}]);
+    assert_eq!(extract_pr_number_from_list(&prs), Some(42));
+}
+
+#[test]
+fn extract_pr_number_from_list_single() {
+    let prs = json!([{"number": 7}]);
+    assert_eq!(extract_pr_number_from_list(&prs), Some(7));
+}
+
+#[test]
+fn extract_pr_number_from_list_empty() {
+    let prs = json!([]);
+    assert_eq!(extract_pr_number_from_list(&prs), None);
+}
+
+#[test]
+fn extract_pr_number_from_list_missing_number() {
+    let prs = json!([{"title": "no number"}]);
+    assert_eq!(extract_pr_number_from_list(&prs), None);
+}
+
+#[test]
+fn extract_pr_number_from_list_not_array() {
+    let prs = json!({"number": 42});
+    assert_eq!(extract_pr_number_from_list(&prs), None);
+}
+
+#[test]
+fn extract_pr_number_from_list_null() {
+    let prs = json!(null);
+    assert_eq!(extract_pr_number_from_list(&prs), None);
+}
+
 #[test]
 fn clean_ci_line_removes_timestamp() {
     let line = "2026-01-27T18:51:46.1029380Z      Failure/Error: some code";

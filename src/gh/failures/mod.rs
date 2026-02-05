@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use super::cli::FailuresArgs;
 use super::client::{parse_test_failures, GithubApi, GithubClient};
+use super::helpers::{get_current_repo, is_test_job, parse_owner_repo};
 
 #[cfg(test)]
 mod tests;
@@ -21,7 +22,7 @@ pub async fn run(args: FailuresArgs) -> Result<()> {
     let pr_number = if let Some(pr) = args.pr {
         pr
     } else {
-        get_current_branch_pr(&owner, &repo).await?
+        get_current_branch_pr(&client, &owner, &repo).await?
     };
 
     process_failures(&client, &owner, &repo, pr_number).await
@@ -115,106 +116,15 @@ pub async fn process_failures(
     Ok(())
 }
 
-/// Check if a job name is test-related
-fn is_test_job(name: &str) -> bool {
-    let name_lower = name.to_lowercase();
-    name_lower.contains("rspec") || name_lower.contains("test") || name_lower.contains("spec")
-}
+/// Get PR number for current branch using octocrab
+async fn get_current_branch_pr(client: &impl GithubApi, owner: &str, repo: &str) -> Result<u64> {
+    let branch = super::helpers::get_current_branch()?;
 
-/// Parse owner/repo from command line argument
-fn parse_owner_repo(repo: &str) -> Result<(String, String)> {
-    let parts: Vec<&str> = repo.split('/').collect();
-    if parts.len() != 2 {
-        anyhow::bail!("Invalid repo format. Expected owner/repo, got: {}", repo);
+    match client.find_pr_for_branch(owner, repo, &branch).await? {
+        Some(pr) => Ok(pr),
+        None => anyhow::bail!(
+            "No PR found for branch '{}'. Use --pr to specify a PR number.",
+            branch
+        ),
     }
-    Ok((parts[0].to_string(), parts[1].to_string()))
-}
-
-/// Get owner/repo from git remote
-fn get_current_repo() -> Result<(String, String)> {
-    let output = run_git_command(&["remote", "get-url", "origin"])?;
-    parse_github_url(output.trim())
-}
-
-/// Run a git command and return stdout (extracted for testability)
-fn run_git_command(args: &[&str]) -> Result<String> {
-    let output = std::process::Command::new("git")
-        .args(args)
-        .output()
-        .context("Failed to run git command")?;
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-/// Parse GitHub URL to extract owner/repo
-fn parse_github_url(url: &str) -> Result<(String, String)> {
-    // Handle SSH: git@github.com:owner/repo.git
-    // Handle HTTPS: https://github.com/owner/repo.git
-    let url = url.trim_end_matches(".git").trim_end_matches('/');
-
-    if url.contains("github.com:") {
-        // SSH format
-        let parts: Vec<&str> = url.split(':').collect();
-        if let Some(path) = parts.last() {
-            let segments: Vec<&str> = path.split('/').collect();
-            if segments.len() >= 2 {
-                return Ok((
-                    segments[segments.len() - 2].to_string(),
-                    segments[segments.len() - 1].to_string(),
-                ));
-            }
-        }
-    } else if url.contains("github.com/") {
-        // HTTPS format
-        let parts: Vec<&str> = url.split("github.com/").collect();
-        if let Some(path) = parts.last() {
-            let segments: Vec<&str> = path.split('/').collect();
-            if segments.len() >= 2 {
-                return Ok((segments[0].to_string(), segments[1].to_string()));
-            }
-        }
-    }
-
-    anyhow::bail!("Could not parse GitHub URL: {}", url)
-}
-
-/// Get PR number for current branch
-async fn get_current_branch_pr(owner: &str, repo: &str) -> Result<u64> {
-    // Get current branch name
-    let branch = run_git_command(&["branch", "--show-current"])?;
-    let branch = branch.trim();
-
-    if branch.is_empty() {
-        anyhow::bail!("Not on a branch. Use --pr to specify a PR number.");
-    }
-
-    // Use gh CLI to find PR for this branch
-    let output = std::process::Command::new("gh")
-        .args([
-            "pr",
-            "list",
-            "--repo",
-            &format!("{}/{}", owner, repo),
-            "--head",
-            branch,
-            "--json",
-            "number",
-            "--limit",
-            "1",
-        ])
-        .output()
-        .context("Failed to find PR for current branch")?;
-
-    parse_pr_number_from_json(&output.stdout)
-}
-
-/// Parse PR number from gh pr list JSON output (testable)
-fn parse_pr_number_from_json(json_bytes: &[u8]) -> Result<u64> {
-    let json: serde_json::Value =
-        serde_json::from_slice(json_bytes).context("Failed to parse gh pr list output")?;
-
-    json.as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|pr| pr["number"].as_u64())
-        .context("No PR found for current branch. Use --pr to specify a PR number.")
 }

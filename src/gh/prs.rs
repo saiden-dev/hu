@@ -281,6 +281,15 @@ mod tests {
         async fn get_job_logs(&self, _owner: &str, _repo: &str, _job_id: u64) -> Result<String> {
             Ok(String::new())
         }
+
+        async fn find_pr_for_branch(
+            &self,
+            _owner: &str,
+            _repo: &str,
+            _branch: &str,
+        ) -> Result<Option<u64>> {
+            Ok(None)
+        }
     }
 
     #[tokio::test]

@@ -33,6 +33,26 @@ pub struct TestFailure {
     pub failure_text: String,
 }
 
+/// A test failure enriched with source file mapping
+#[derive(Debug, Clone, Serialize)]
+pub struct FixFailure {
+    pub test_file: String,
+    pub source_files: Vec<String>,
+    pub failure_text: String,
+    pub language: String,
+}
+
+/// Full fix report for a failed CI run
+#[derive(Debug, Clone, Serialize)]
+pub struct FixReport {
+    pub repository: String,
+    pub pr_number: Option<u64>,
+    pub run_id: u64,
+    pub failures: Vec<FixFailure>,
+    pub test_files: Vec<String>,
+    pub source_files: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,5 +174,103 @@ mod tests {
         };
         let debug_str = format!("{:?}", pr);
         assert!(debug_str.contains("PullRequest"));
+    }
+
+    #[test]
+    fn fix_failure_serializes() {
+        let f = FixFailure {
+            test_file: "spec/models/user_spec.rb:10".to_string(),
+            source_files: vec!["app/models/user.rb".to_string()],
+            failure_text: "expected true".to_string(),
+            language: "ruby".to_string(),
+        };
+        let json = serde_json::to_string(&f).unwrap();
+        assert!(json.contains("user_spec.rb"));
+        assert!(json.contains("app/models/user.rb"));
+        assert!(json.contains("ruby"));
+    }
+
+    #[test]
+    fn fix_failure_clone() {
+        let f = FixFailure {
+            test_file: "test.rb".to_string(),
+            source_files: vec!["src.rb".to_string()],
+            failure_text: "err".to_string(),
+            language: "ruby".to_string(),
+        };
+        let c = f.clone();
+        assert_eq!(c.test_file, f.test_file);
+        assert_eq!(c.source_files, f.source_files);
+    }
+
+    #[test]
+    fn fix_failure_debug() {
+        let f = FixFailure {
+            test_file: "t".to_string(),
+            source_files: vec![],
+            failure_text: "e".to_string(),
+            language: "rust".to_string(),
+        };
+        let d = format!("{:?}", f);
+        assert!(d.contains("FixFailure"));
+    }
+
+    #[test]
+    fn fix_report_serializes() {
+        let r = FixReport {
+            repository: "owner/repo".to_string(),
+            pr_number: Some(42),
+            run_id: 123,
+            failures: vec![],
+            test_files: vec!["spec/a_spec.rb".to_string()],
+            source_files: vec!["app/a.rb".to_string()],
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(json.contains("owner/repo"));
+        assert!(json.contains("42"));
+        assert!(json.contains("123"));
+    }
+
+    #[test]
+    fn fix_report_clone() {
+        let r = FixReport {
+            repository: "o/r".to_string(),
+            pr_number: None,
+            run_id: 1,
+            failures: vec![],
+            test_files: vec![],
+            source_files: vec![],
+        };
+        let c = r.clone();
+        assert_eq!(c.repository, r.repository);
+        assert_eq!(c.pr_number, r.pr_number);
+    }
+
+    #[test]
+    fn fix_report_debug() {
+        let r = FixReport {
+            repository: "o/r".to_string(),
+            pr_number: None,
+            run_id: 1,
+            failures: vec![],
+            test_files: vec![],
+            source_files: vec![],
+        };
+        let d = format!("{:?}", r);
+        assert!(d.contains("FixReport"));
+    }
+
+    #[test]
+    fn fix_report_no_pr() {
+        let r = FixReport {
+            repository: "o/r".to_string(),
+            pr_number: None,
+            run_id: 1,
+            failures: vec![],
+            test_files: vec![],
+            source_files: vec![],
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(json.contains("null"));
     }
 }

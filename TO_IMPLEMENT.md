@@ -27,7 +27,7 @@ Commands for Claude Code session data analysis.
 | Command | Description |
 |---------|-------------|
 | `hu gh config` | Show GitHub configuration |
-| `hu gh fix` | Analyze CI failures, output investigation context |
+| ~~`hu gh fix`~~ | ~~Analyze CI failures, output investigation context~~ ✅ |
 | `hu gh open <pr>` | Open PR in browser |
 | `hu gh stats` | Show workflow run duration statistics |
 
@@ -133,7 +133,7 @@ These commands are implemented and working in the Rust CLI:
 ```
 hu context track/check/summary/clear
 hu read --outline/--interface/--around/--diff
-hu gh login/prs/runs/failures/ci
+hu gh login/prs/runs/failures/ci/fix
 hu jira auth/tickets/sprint/search/show/update
 hu utils fetch-html/grep/web-search/docs-index/docs-search/docs-section
 hu dashboard show/refresh
