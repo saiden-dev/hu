@@ -488,6 +488,33 @@ fn output_todos_unknown_status() {
 }
 
 #[test]
+fn output_pending_todos_unknown_status() {
+    let todo = TodoWithProject {
+        id: 1,
+        session_id: "s1".to_string(),
+        content: "task".to_string(),
+        status: "weird_status".to_string(),
+        active_form: None,
+        project: "/proj".to_string(),
+    };
+    assert!(output_pending_todos(&[todo], &OutputFormat::Table).is_ok());
+}
+
+#[test]
+fn output_pricing_positive_savings() {
+    let mut data = make_pricing_data();
+    data.total_api_cost = 500.0;
+    data.value_comparisons = vec![ValueComparison {
+        service: "Test".to_string(),
+        plan: "Basic".to_string(),
+        price: 20.0,
+        savings: 480.0,
+        savings_percent: 96.0,
+    }];
+    assert!(output_pricing(&data, &OutputFormat::Table).is_ok());
+}
+
+#[test]
 fn output_pending_in_progress() {
     let todo = TodoWithProject {
         id: 1,

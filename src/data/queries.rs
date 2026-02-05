@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 
 use super::types::*;
 
@@ -36,7 +37,7 @@ pub fn get_sessions(conn: &Connection, project: Option<&str>, limit: i64) -> Res
 
 pub fn get_session_by_prefix(conn: &Connection, prefix: &str) -> Result<Option<Session>> {
     let pattern = format!("{prefix}%");
-    let result = conn.query_row(
+    Ok(conn.query_row(
         "SELECT id, project, display, started_at, message_count, total_cost_usd, git_branch FROM sessions WHERE id LIKE ?1 ORDER BY started_at DESC LIMIT 1",
         rusqlite::params![pattern],
         |row| {
@@ -50,16 +51,11 @@ pub fn get_session_by_prefix(conn: &Connection, prefix: &str) -> Result<Option<S
                 git_branch: row.get(6)?,
             })
         },
-    );
-    match result {
-        Ok(s) => Ok(Some(s)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 pub fn get_session_by_id(conn: &Connection, id: &str) -> Result<Option<Session>> {
-    let result = conn.query_row(
+    Ok(conn.query_row(
         "SELECT id, project, display, started_at, message_count, total_cost_usd, git_branch FROM sessions WHERE id = ?1",
         rusqlite::params![id],
         |row| {
@@ -73,12 +69,7 @@ pub fn get_session_by_id(conn: &Connection, id: &str) -> Result<Option<Session>>
                 git_branch: row.get(6)?,
             })
         },
-    );
-    match result {
-        Ok(s) => Ok(Some(s)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    ).optional()?)
 }
 
 pub fn get_messages_by_session(conn: &Connection, session_id: &str) -> Result<Vec<Message>> {

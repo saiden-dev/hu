@@ -46,13 +46,17 @@ pub fn resolve_db_path(db: &str) -> PathBuf {
 }
 
 fn config_dir() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
-        home.join(".config").join("hu")
-    } else {
-        PathBuf::from(".config/hu")
+    config_dir_with_home(dirs::home_dir())
+}
+
+fn config_dir_with_home(home: Option<PathBuf>) -> PathBuf {
+    match home {
+        Some(h) => h.join(".config").join("hu"),
+        None => PathBuf::from(".config/hu"),
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn load_data_config() -> Result<DataConfig> {
     let config_path = config_dir().join("settings.toml");
     if !config_path.exists() {
@@ -172,6 +176,19 @@ auto_sync_interval = 0
         let config = load_from_toml(toml).unwrap();
         assert_eq!(config.auto_sync_interval, 0);
         assert!(config.sync_on_start); // default preserved
+    }
+
+    #[test]
+    fn config_dir_with_home_some() {
+        let home = PathBuf::from("/home/user");
+        let result = config_dir_with_home(Some(home));
+        assert_eq!(result, PathBuf::from("/home/user/.config/hu"));
+    }
+
+    #[test]
+    fn config_dir_with_home_none() {
+        let result = config_dir_with_home(None);
+        assert_eq!(result, PathBuf::from(".config/hu"));
     }
 
     #[test]

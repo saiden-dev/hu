@@ -14,6 +14,7 @@ pub use cli::DataCommand;
 use anyhow::{bail, Result};
 use types::OutputFormat;
 
+#[cfg(not(tarpaulin_include))]
 pub async fn run_command(cmd: DataCommand) -> Result<()> {
     match cmd {
         DataCommand::Sync { force, quiet } => cmd_sync(force, quiet),
@@ -45,18 +46,21 @@ fn get_format(json: bool) -> OutputFormat {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn open_db() -> Result<db::SqliteStore> {
     let cfg = config::load_data_config()?;
     let store = db::SqliteStore::open_initialized(&cfg.database)?;
     Ok(store)
 }
 
+#[cfg(not(tarpaulin_include))]
 fn ensure_synced(store: &db::SqliteStore) -> Result<()> {
     let cfg = config::load_data_config()?;
     sync::sync_if_needed(&store.conn, &cfg.claude_dir, cfg.auto_sync_interval)?;
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_sync(force: bool, quiet: bool) -> Result<()> {
     let cfg = config::load_data_config()?;
     let store = db::SqliteStore::open_initialized(&cfg.database)?;
@@ -80,11 +84,13 @@ fn cmd_sync(force: bool, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_config(json: bool) -> Result<()> {
     let cfg = config::load_data_config()?;
     display::output_config(&cfg, &get_format(json))
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_session(cmd: cli::SessionCommand) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -127,6 +133,7 @@ fn cmd_session(cmd: cli::SessionCommand) -> Result<()> {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_stats(json: bool, today: bool) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -142,6 +149,7 @@ fn cmd_stats(json: bool, today: bool) -> Result<()> {
     display::output_stats(&stats, &model_usage, &get_format(json))
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_todos(cmd: cli::TodosCommand) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -158,6 +166,7 @@ fn cmd_todos(cmd: cli::TodosCommand) -> Result<()> {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_search(query: &str, limit: i64, json: bool) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -166,6 +175,7 @@ fn cmd_search(query: &str, limit: i64, json: bool) -> Result<()> {
     display::output_search_results(&results, &get_format(json))
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_tools(tool: Option<&str>, json: bool) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -183,6 +193,7 @@ fn cmd_tools(tool: Option<&str>, json: bool) -> Result<()> {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_errors(recent_days: u32, json: bool) -> Result<()> {
     let cfg = config::load_data_config()?;
     let errors = scan_debug_errors(&cfg.claude_dir, recent_days)?;
@@ -245,6 +256,7 @@ fn scan_debug_errors(
     Ok(errors)
 }
 
+#[cfg(not(tarpaulin_include))]
 fn cmd_pricing(subscription: &str, billing_day: u32, json: bool) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -277,6 +289,7 @@ fn cmd_pricing(subscription: &str, billing_day: u32, json: bool) -> Result<()> {
     display::output_pricing(&data, &get_format(json))
 }
 
+#[cfg(not(tarpaulin_include))]
 async fn cmd_branches(branch: Option<&str>, limit: i64, json: bool) -> Result<()> {
     let store = open_db()?;
     ensure_synced(&store)?;
@@ -292,6 +305,7 @@ async fn cmd_branches(branch: Option<&str>, limit: i64, json: bool) -> Result<()
     display::output_branches(&branches, &get_format(json))
 }
 
+#[cfg(not(tarpaulin_include))]
 async fn fetch_pr_info(branch: &str) -> Option<display::PrInfo> {
     let output: std::process::Output = tokio::process::Command::new("gh")
         .args([
@@ -408,6 +422,32 @@ mod tests {
 
         let errors = scan_debug_errors(&tmp, 7).unwrap();
         assert!(errors.is_empty()); // .log not .txt
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn scan_debug_errors_skips_old_files() {
+        let tmp = std::env::temp_dir().join("hu-test-debug-old");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let debug = tmp.join("debug");
+        std::fs::create_dir_all(&debug).unwrap();
+
+        let file_path = debug.join("old.txt");
+        std::fs::write(&file_path, "Error: old error\n").unwrap();
+
+        // Set file modification time to 30 days ago
+        let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 86400);
+        let file = std::fs::File::options()
+            .write(true)
+            .open(&file_path)
+            .unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(old_time))
+            .unwrap();
+
+        // Only look at last 7 days - old file should be skipped
+        let errors = scan_debug_errors(&tmp, 7).unwrap();
+        assert!(errors.is_empty());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

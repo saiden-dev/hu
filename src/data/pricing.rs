@@ -845,6 +845,33 @@ mod tests {
     }
 
     #[test]
+    fn family_match_opus_45_dot_variant() {
+        let p = get_model_pricing(Some("some-opus-4.5-model"));
+        assert_eq!(p.display_name, "Opus 4.5");
+    }
+
+    #[test]
+    fn family_match_haiku_45_dot_variant() {
+        let p = get_model_pricing(Some("some-haiku-4.5-model"));
+        assert_eq!(p.display_name, "Haiku 4.5");
+    }
+
+    #[test]
+    fn billing_cycle_december_wrap() {
+        // Dec 15, billing day 10 -> cycle started Dec 10, ends Jan 10
+        let dec15 = chrono::NaiveDate::from_ymd_opt(2024, 12, 15)
+            .unwrap()
+            .and_hms_opt(12, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis();
+        let cycle = calculate_billing_cycle(10, dec15);
+        assert_eq!(cycle.billing_day, 10);
+        assert!(cycle.days_elapsed >= 5);
+        assert!(cycle.total_days >= 28);
+    }
+
+    #[test]
     fn model_pricing_cache_fields() {
         let p = get_model_pricing(Some("claude-opus-4-5-20251101"));
         assert_eq!(p.cache_write_per_mtok, Some(6.25));

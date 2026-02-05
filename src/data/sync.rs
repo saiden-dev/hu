@@ -1,21 +1,20 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 use std::path::Path;
 
 use super::paths;
 use super::types::{HistoryEntry, MessageEntry, SyncResult, TodoEntry};
 
 pub fn get_last_sync_time(conn: &Connection, source: &str) -> Result<i64> {
-    let result = conn.query_row(
-        "SELECT last_sync_at FROM sync_state WHERE source = ?1",
-        rusqlite::params![source],
-        |row| row.get(0),
-    );
-    match result {
-        Ok(val) => Ok(val),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
-        Err(e) => Err(e.into()),
-    }
+    let result: Option<i64> = conn
+        .query_row(
+            "SELECT last_sync_at FROM sync_state WHERE source = ?1",
+            rusqlite::params![source],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(result.unwrap_or(0))
 }
 
 pub fn update_sync_state(conn: &Connection, source: &str) -> Result<()> {
@@ -547,6 +546,105 @@ mod tests {
 
         let count = sync_todos(&store.conn, &tmp).unwrap();
         assert_eq!(count, 0);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_sessions_skips_missing_uuid() {
+        let store = open_test_db();
+        let tmp = std::env::temp_dir().join("hu-test-sync-no-uuid");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        let proj_dir = tmp.join("projects").join("-home-user-proj");
+        std::fs::create_dir_all(&proj_dir).unwrap();
+
+        // Entry without uuid should be skipped
+        let jsonl = r#"{"type":"user","timestamp":"2024-01-01T00:00:00Z","message":{"role":"user","content":"hello"}}
+{"uuid":"m1","type":"user","timestamp":"2024-01-01T00:00:01Z","message":{"role":"user","content":"world"}}
+"#;
+        std::fs::write(proj_dir.join("sess-nouuid.jsonl"), jsonl).unwrap();
+
+        let count = sync_sessions(&store.conn, &tmp).unwrap();
+        assert_eq!(count, 1); // Only the entry with uuid
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_sessions_skips_missing_timestamp() {
+        let store = open_test_db();
+        let tmp = std::env::temp_dir().join("hu-test-sync-no-ts");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        let proj_dir = tmp.join("projects").join("-home-user-proj");
+        std::fs::create_dir_all(&proj_dir).unwrap();
+
+        // Entry with uuid and message but no timestamp should be skipped
+        let jsonl = r#"{"uuid":"m1","type":"user","message":{"role":"user","content":"hello"}}
+{"uuid":"m2","type":"user","timestamp":"2024-01-01T00:00:01Z","message":{"role":"user","content":"world"}}
+"#;
+        std::fs::write(proj_dir.join("sess-nots.jsonl"), jsonl).unwrap();
+
+        let count = sync_sessions(&store.conn, &tmp).unwrap();
+        assert_eq!(count, 1); // Only the entry with timestamp
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_sessions_skips_nameless_tool_use() {
+        let store = open_test_db();
+        let tmp = std::env::temp_dir().join("hu-test-sync-no-toolname");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        let proj_dir = tmp.join("projects").join("-home-user-proj");
+        std::fs::create_dir_all(&proj_dir).unwrap();
+
+        // Assistant message with tool_use block that has no name should skip that block
+        let jsonl = r#"{"uuid":"m1","type":"assistant","timestamp":"2024-01-01T00:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","input":{"path":"/tmp"}},{"type":"tool_use","name":"Read","input":{"path":"/tmp"}}],"model":"claude-sonnet-4-5-20251101","usage":{"input_tokens":10,"output_tokens":50}}}
+"#;
+        std::fs::write(proj_dir.join("sess-notool.jsonl"), jsonl).unwrap();
+
+        let count = sync_sessions(&store.conn, &tmp).unwrap();
+        assert_eq!(count, 1);
+
+        // Only one tool_usage row (the one with name "Read"), nameless block skipped
+        let tool_count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM tool_usage", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tool_count, 1);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_todos_skips_missing_content() {
+        let store = open_test_db();
+        let tmp = std::env::temp_dir().join("hu-test-sync-todos-nocontent");
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        store
+            .conn
+            .execute(
+                "INSERT INTO sessions (id, project, started_at) VALUES ('sess-nc', '/proj', 100)",
+                [],
+            )
+            .unwrap();
+
+        let todos_dir = tmp.join("todos");
+        std::fs::create_dir_all(&todos_dir).unwrap();
+
+        // Todo with no content should be skipped
+        let json = r#"[
+            {"status":"pending"},
+            {"content":"Valid todo","status":"pending"}
+        ]"#;
+        std::fs::write(todos_dir.join("sess-nc.json"), json).unwrap();
+
+        let count = sync_todos(&store.conn, &tmp).unwrap();
+        assert_eq!(count, 1); // Only the valid todo
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
