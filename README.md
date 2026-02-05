@@ -1,5 +1,9 @@
 # hu
 
+[![Crates.io](https://img.shields.io/crates/v/hu.svg)](https://crates.io/crates/hu)
+[![Downloads](https://img.shields.io/crates/d/hu.svg)](https://crates.io/crates/hu)
+[![CI](https://github.com/aladac/hu/actions/workflows/ci.yml/badge.svg)](https://github.com/aladac/hu/actions/workflows/ci.yml)
+
 Dev workflow CLI for Claude Code integration. Unifies access to Jira, GitHub, Slack, PagerDuty, Sentry, NewRelic, AWS CodePipeline, and EKS from a single tool, with built-in support for Claude Code session analytics.
 
 ## Install
