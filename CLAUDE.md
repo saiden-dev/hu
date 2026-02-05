@@ -70,11 +70,16 @@ Interfaces (cli/) → Services (service.rs) → Clients (client.rs) → Types (t
 **Module structure:**
 ```
 {module}/
-  mod.rs         # Re-exports + command dispatch
-  types.rs       # Data structs
-  client.rs      # API calls (implements trait)
-  service.rs     # Business logic (accepts trait, returns data)
-  {handler}.rs   # CLI handler (thin, uses service)
+  mod.rs           # Re-exports + command dispatch
+  cli.rs           # CLI args (clap derive)
+  types.rs         # Data structs
+  config.rs        # Module-specific config
+  client/          # API calls (implements trait)
+    mod.rs
+    tests.rs
+  display/         # Output formatting
+    mod.rs
+    tests.rs
 ```
 
 ### 3. Structure (Base-First)
@@ -87,7 +92,6 @@ Interfaces (cli/) → Services (service.rs) → Clients (client.rs) → Types (t
 - `util/fmt.rs` - time_ago, bytes, pluralize
 - `util/config.rs` - config loading
 - `util/http.rs` - HTTP client setup
-- `util/ui/` - ratatui helpers
 
 ### 4. Style
 
@@ -105,7 +109,8 @@ API clients: `octocrab` (gh), `gouqi` (jira), `reqwest` (sentry/pagerduty)
 
 ### 6. Output
 
-- ratatui for tables, progress, status
+- `comfy_table` with `UTF8_FULL_CONDENSED` preset for tables
+- `serde_json::to_string_pretty` for JSON output (via `-j`/`--json` flags)
 - Colors: green=success, yellow=progress, red=error
 - Icons: ✓ ◐ ○ ✗ ⚠
 - No plain `println!` for user-facing output
