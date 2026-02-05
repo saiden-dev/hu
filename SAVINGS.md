@@ -2,6 +2,32 @@
 
 Comparison of hu CLI tools vs Claude Code built-in tools and MCP commands.
 
+## Why CLI Over MCP?
+
+**CLI tools are the most token-efficient way to extend Claude Code.**
+
+MCP servers have significant hidden costs:
+1. **Schema overhead**: Every MCP tool requires its full JSON schema loaded into context
+2. **Multiplicative cost**: 10 tools × 200-300 tokens = 2-3k tokens before any work
+3. **Per-session cost**: This overhead is paid every session, every conversation
+4. **No composability**: Can't pipe MCP outputs or combine with shell tools
+
+CLI tools like `hu` have **zero context overhead**:
+- Claude already knows how to run shell commands
+- Self-documenting via `--help` (only loaded when needed)
+- Full Unix composability (pipes, redirects, xargs)
+- Plain text errors (no JSON parsing overhead)
+
+| Factor | MCP | CLI (hu) |
+|--------|-----|----------|
+| Schema overhead | 2-3k/session | 0 |
+| Self-documenting | No | Yes (`--help`) |
+| Composable | Limited | Full (pipes) |
+| Error format | Wrapped JSON | Plain text |
+| Learning curve | New protocol | Standard shell |
+
+**Bottom line**: An MCP server with 20 tools costs ~4-6k tokens per session just to exist. That's equivalent to reading a 300-line file—wasted on tool definitions you might not even use.
+
 ## Key Insight
 
 **Reasoning is cheap, I/O is expensive.**
@@ -60,20 +86,6 @@ Comparison of hu CLI tools vs Claude Code built-in tools and MCP commands.
 | **hu context check** | 0 | Already in context |
 | **Savings** | **100%** | Prevents duplicates |
 
-## MCP vs CLI
-
-MCP has hidden costs:
-- Every MCP tool requires full JSON schema in context
-- A dozen tools = 2-3k tokens before any work
-- CLI tools are "zero context" (just needs `--help`)
-
-| Factor | MCP | CLI (hu) |
-|--------|-----|----------|
-| Schema overhead | 2-3k/session | 0 |
-| Self-documenting | No | Yes (`--help`) |
-| Composable | Limited | Full (pipes) |
-| Error format | Wrapped JSON | Plain text |
-
 ## Hook-Based Savings
 
 Automatic optimizations via `~/.claude/hooks/`:
@@ -100,28 +112,45 @@ Automatic optimizations via `~/.claude/hooks/`:
 
 | Pattern | Savings |
 |---------|---------|
+| CLI tools vs MCP schemas | 2-6k/session |
 | `hu read --outline` instead of full read | 10-50x |
 | `hu context check` before read | 100% of dupes |
 | `hu utils docs-section` vs full doc | 10-20x |
 | `hu utils fetch-html -c` vs full page | 5-10x |
-| CLI tools vs MCP schemas | 2-3k/session |
 
 **Estimated total savings: 40-60% of typical session tokens.**
 
 ## Current Implementation Status
 
-### Working (Rust CLI)
-- `hu context track/check/summary/clear`
-- `hu read --outline/--interface/--around/--diff`
-- `hu utils docs-index/docs-search/docs-section`
-- `hu utils fetch-html`
-- `hu gh prs/runs/failures/ci`
-- `hu jira tickets/sprint/search/show`
+### Fully Implemented (Rust CLI)
+
+**Core Utilities**
+- `hu read --outline/--interface/--around/--diff` - Smart file reading
+- `hu context track/check/summary/clear` - Context tracking
+- `hu utils fetch-html` - Web content extraction
+- `hu utils grep` - Token-efficient code search
+- `hu utils web-search` - Brave Search integration
+- `hu utils docs-index/docs-search/docs-section` - Documentation indexing
+
+**Service Integrations**
+- `hu jira` - Tickets, sprints, search, updates (OAuth 2.0)
+- `hu gh` - PRs, runs, failures, fix (CI analysis)
+- `hu slack` - Channels, messages, search, tidy
+- `hu pagerduty` - Oncall, alerts, incidents
+- `hu sentry` - Issues, events
+- `hu newrelic` - Issues, incidents, NRQL queries
+- `hu pipeline` - AWS CodePipeline status
+- `hu eks` - Pod list, exec, logs
+
+**Analytics**
+- `hu data sync` - Claude Code session data to SQLite
+- `hu data stats` - Usage statistics
+- `hu data search` - Full-text message search
+- `hu data tools` - Tool usage analysis
+- `hu data pricing` - Cost analysis vs API
+- `hu data branches` - Activity by git branch
 
 ### Hooks Active
 - `pre-read.sh` - Context tracking, large file warnings
 - `session-start.sh` - Cleanup, index building
 - `session-end.sh` - Context cleanup
-
-### Not Yet Ported
-See TO_IMPLEMENT.md for legacy commands awaiting Rust port.
