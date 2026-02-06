@@ -4,6 +4,7 @@ use crate::context::ContextCommand;
 use crate::data::DataCommand;
 use crate::eks::EksCommand;
 use crate::gh::GhCommand;
+use crate::install::InstallCommand;
 use crate::jira::JiraCommand;
 use crate::newrelic::NewRelicCommand;
 use crate::pagerduty::PagerDutyCommand;
@@ -93,5 +94,11 @@ pub enum Command {
     Data {
         #[command(subcommand)]
         cmd: Option<DataCommand>,
+    },
+
+    /// Install hu hooks and commands to Claude Code
+    Install {
+        #[command(subcommand)]
+        cmd: Option<InstallCommand>,
     },
 }

@@ -44,6 +44,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
 [dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 lto = true

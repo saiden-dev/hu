@@ -5,6 +5,7 @@ mod context;
 mod data;
 mod eks;
 mod gh;
+mod install;
 mod jira;
 mod newrelic;
 mod pagerduty;
@@ -101,6 +102,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Data { cmd: None } => {
             print_subcommand_help("data")?;
+        }
+        Command::Install { cmd: Some(cmd) } => {
+            return install::run_command(cmd).await;
+        }
+        Command::Install { cmd: None } => {
+            print_subcommand_help("install")?;
         }
     }
     Ok(())
