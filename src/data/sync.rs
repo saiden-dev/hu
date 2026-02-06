@@ -205,6 +205,13 @@ pub fn sync_todos(conn: &Connection, claude_dir: &Path) -> Result<usize> {
             Err(_) => continue,
         };
 
+        // Ensure session exists (may not be in history.jsonl yet)
+        let now = chrono::Utc::now().timestamp_millis();
+        conn.execute(
+            "INSERT OR IGNORE INTO sessions (id, project, started_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![session_id, "unknown", now],
+        )?;
+
         // Delete existing todos for this session, then re-insert
         conn.execute(
             "DELETE FROM todos WHERE session_id = ?1",
