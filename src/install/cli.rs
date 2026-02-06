@@ -34,7 +34,7 @@ pub struct InstallArgs {
     #[arg(long)]
     pub commands_only: bool,
 
-    /// Specific components to install (e.g., "hooks/pre-read", "commands/hu/read")
+    /// Specific components to install (e.g., "hooks/hu/pre-read", "commands/hu/read")
     #[arg(value_name = "COMPONENT")]
     pub components: Vec<String>,
 }

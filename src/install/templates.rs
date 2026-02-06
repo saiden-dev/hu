@@ -765,7 +765,7 @@ hu install run --local          # Install to ./.claude (local)
 hu install run --force          # Override modified files
 hu install run --hooks-only     # Install only hooks
 hu install run --commands-only  # Install only commands
-hu install run hooks/pre-read   # Install specific component
+hu install run hooks/hu/pre-read   # Install specific component
 ```
 "#;
 
@@ -777,45 +777,45 @@ hu install run hooks/pre-read   # Install specific component
 pub static COMPONENTS: &[Component] = &[
     // Hooks (6)
     Component {
-        id: "hooks/pre-read",
+        id: "hooks/hu/pre-read",
         kind: ComponentKind::Hook,
         description: "Prevents duplicate file reads, warns on large files",
-        path: "hooks/pre-read.sh",
+        path: "hooks/hu/pre-read.sh",
         content: HOOK_PRE_READ,
     },
     Component {
-        id: "hooks/pre-grep",
+        id: "hooks/hu/pre-grep",
         kind: ComponentKind::Hook,
         description: "Warns on broad patterns, suggests efficient modes",
-        path: "hooks/pre-grep.sh",
+        path: "hooks/hu/pre-grep.sh",
         content: HOOK_PRE_GREP,
     },
     Component {
-        id: "hooks/pre-webfetch",
+        id: "hooks/hu/pre-webfetch",
         kind: ComponentKind::Hook,
         description: "Logs URL fetches, warns on HTTP",
-        path: "hooks/pre-webfetch.sh",
+        path: "hooks/hu/pre-webfetch.sh",
         content: HOOK_PRE_WEBFETCH,
     },
     Component {
-        id: "hooks/pre-websearch",
+        id: "hooks/hu/pre-websearch",
         kind: ComponentKind::Hook,
         description: "Logs searches, warns on sensitive terms",
-        path: "hooks/pre-websearch.sh",
+        path: "hooks/hu/pre-websearch.sh",
         content: HOOK_PRE_WEBSEARCH,
     },
     Component {
-        id: "hooks/session-start",
+        id: "hooks/hu/session-start",
         kind: ComponentKind::Hook,
         description: "Cleans old files, initializes context tracking",
-        path: "hooks/session-start.sh",
+        path: "hooks/hu/session-start.sh",
         content: HOOK_SESSION_START,
     },
     Component {
-        id: "hooks/session-end",
+        id: "hooks/hu/session-end",
         kind: ComponentKind::Hook,
         description: "Shows context summary, clears tracking",
-        path: "hooks/session-end.sh",
+        path: "hooks/hu/session-end.sh",
         content: HOOK_SESSION_END,
     },
     // Context commands (4)

@@ -255,7 +255,7 @@ fn update_settings_json(base_dir: &std::path::Path) -> Result<()> {
                 "matcher": "Read",
                 "hooks": [{
                     "type": "command",
-                    "command": format!("{}/hooks/pre-read.sh", hooks_prefix),
+                    "command": format!("{}/hooks/hu/pre-read.sh", hooks_prefix),
                     "timeout": 5000
                 }]
             },
@@ -263,7 +263,7 @@ fn update_settings_json(base_dir: &std::path::Path) -> Result<()> {
                 "matcher": "Grep",
                 "hooks": [{
                     "type": "command",
-                    "command": format!("{}/hooks/pre-grep.sh", hooks_prefix),
+                    "command": format!("{}/hooks/hu/pre-grep.sh", hooks_prefix),
                     "timeout": 5000
                 }]
             },
@@ -271,7 +271,7 @@ fn update_settings_json(base_dir: &std::path::Path) -> Result<()> {
                 "matcher": "WebFetch",
                 "hooks": [{
                     "type": "command",
-                    "command": format!("{}/hooks/pre-webfetch.sh", hooks_prefix),
+                    "command": format!("{}/hooks/hu/pre-webfetch.sh", hooks_prefix),
                     "timeout": 5000
                 }]
             },
@@ -279,7 +279,7 @@ fn update_settings_json(base_dir: &std::path::Path) -> Result<()> {
                 "matcher": "WebSearch",
                 "hooks": [{
                     "type": "command",
-                    "command": format!("{}/hooks/pre-websearch.sh", hooks_prefix),
+                    "command": format!("{}/hooks/hu/pre-websearch.sh", hooks_prefix),
                     "timeout": 5000
                 }]
             }
@@ -287,14 +287,14 @@ fn update_settings_json(base_dir: &std::path::Path) -> Result<()> {
         "SessionStart": [{
             "hooks": [{
                 "type": "command",
-                "command": format!("{}/hooks/session-start.sh", hooks_prefix),
+                "command": format!("{}/hooks/hu/session-start.sh", hooks_prefix),
                 "timeout": 30000
             }]
         }],
         "SessionEnd": [{
             "hooks": [{
                 "type": "command",
-                "command": format!("{}/hooks/session-end.sh", hooks_prefix),
+                "command": format!("{}/hooks/hu/session-end.sh", hooks_prefix),
                 "timeout": 10000
             }]
         }]
