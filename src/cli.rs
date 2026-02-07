@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 use crate::context::ContextCommand;
 use crate::data::DataCommand;
+use crate::docs::DocsCommand;
 use crate::eks::EksCommand;
 use crate::gh::GhCommand;
 use crate::install::InstallCommand;
@@ -100,5 +101,11 @@ pub enum Command {
     Install {
         #[command(subcommand)]
         cmd: Option<InstallCommand>,
+    },
+
+    /// Documentation management (add, get, list, remove, sync)
+    Docs {
+        #[command(subcommand)]
+        cmd: Option<DocsCommand>,
     },
 }

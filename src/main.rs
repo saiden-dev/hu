@@ -3,8 +3,10 @@ use clap::{CommandFactory, Parser};
 mod cli;
 mod context;
 mod data;
+mod docs;
 mod eks;
 mod gh;
+mod git;
 mod install;
 mod jira;
 mod newrelic;
@@ -108,6 +110,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Install { cmd: None } => {
             print_subcommand_help("install")?;
+        }
+        Command::Docs { cmd: Some(cmd) } => {
+            return docs::run_command(cmd).await;
+        }
+        Command::Docs { cmd: None } => {
+            print_subcommand_help("docs")?;
         }
     }
     Ok(())

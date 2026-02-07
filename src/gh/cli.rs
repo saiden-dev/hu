@@ -1,4 +1,5 @@
 use clap::{Args, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Debug, Subcommand)]
 pub enum GhCommand {
@@ -12,6 +13,26 @@ pub enum GhCommand {
     Fix(FixArgs),
     /// List workflow runs
     Runs(RunsArgs),
+    /// Commit and push all changes (quick sync)
+    Sync(SyncArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SyncArgs {
+    /// Path to git repository (default: current directory)
+    pub path: Option<PathBuf>,
+    /// Skip git commit
+    #[arg(long)]
+    pub no_commit: bool,
+    /// Skip git push
+    #[arg(long)]
+    pub no_push: bool,
+    /// Custom commit message
+    #[arg(long, short)]
+    pub message: Option<String>,
+    /// Output as JSON
+    #[arg(long, short)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]
