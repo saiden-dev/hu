@@ -100,6 +100,15 @@ Interfaces (cli/) → Services (service.rs) → Clients (client.rs) → Types (t
 - Early returns, flat structure
 - All types: `#[derive(Debug)]`
 - Max 400 lines/file, 50 lines/function
+- Import order: std → external crates → crate → super/self
+
+**Forbidden:**
+- `.unwrap()` in library code (use `?` or `expect()` with context)
+- `panic!()` for recoverable errors
+- Wildcard imports (`use foo::*`)
+- `dbg!()` / `todo!()` in committed code
+- Magic numbers (use named constants)
+- Silent failures (always propagate with `?`)
 
 ### 5. Dependencies
 
