@@ -1,6 +1,6 @@
 [package]
 name = "hu"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.75"
 description = "Dev workflow CLI for Claude Code integration - Jira, GitHub, Slack, PagerDuty, Sentry, NewRelic, AWS"
