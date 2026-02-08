@@ -1,54 +1,33 @@
 use super::*;
-use client::SlackClient;
 use config::{OAuthConfig, SlackConfig};
-use reqwest::Client;
 
-fn make_unconfigured_client() -> SlackClient {
+#[test]
+fn test_ensure_configured_when_not_configured() {
     let config = SlackConfig {
-        oauth: OAuthConfig {
-            client_id: None,
-            client_secret: None,
-            bot_token: None,
-            user_token: None,
-            team_id: None,
-            team_name: None,
-        },
+        oauth: OAuthConfig::default(),
         default_channel: String::new(),
         is_configured: false,
     };
-    let http = Client::builder().build().unwrap();
-    SlackClient::with_config(config, http)
-}
-
-fn make_configured_client() -> SlackClient {
-    let config = SlackConfig {
-        oauth: OAuthConfig {
-            client_id: None,
-            client_secret: None,
-            bot_token: Some("xoxb-test-token".to_string()),
-            user_token: Some("xoxp-test-token".to_string()),
-            team_id: Some("T12345".to_string()),
-            team_name: Some("Test Team".to_string()),
-        },
-        default_channel: "#general".to_string(),
-        is_configured: true,
-    };
-    let http = Client::builder().build().unwrap();
-    SlackClient::with_config(config, http)
-}
-
-#[test]
-fn test_check_configured_when_not_configured() {
-    let client = make_unconfigured_client();
-    let result = handlers::check_configured(&client);
+    let result = service::ensure_configured(&config);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not configured"));
 }
 
 #[test]
-fn test_check_configured_when_configured() {
-    let client = make_configured_client();
-    let result = handlers::check_configured(&client);
+fn test_ensure_configured_when_configured() {
+    let config = SlackConfig {
+        oauth: OAuthConfig {
+            client_id: None,
+            client_secret: None,
+            bot_token: Some("xoxb-test".to_string()),
+            user_token: None,
+            team_id: Some("T123".to_string()),
+            team_name: Some("Test".to_string()),
+        },
+        default_channel: String::new(),
+        is_configured: true,
+    };
+    let result = service::ensure_configured(&config);
     assert!(result.is_ok());
 }
 

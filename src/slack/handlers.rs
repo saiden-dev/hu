@@ -1,17 +1,16 @@
 use anyhow::Result;
 
 use super::auth;
-use super::channels;
 use super::client::SlackClient;
 use super::config::{self, load_config};
 use super::display;
-use super::messages;
-use super::search;
+use super::service;
 use super::tidy;
 use super::types::OutputFormat;
 use super::SlackCommands;
 
-/// Run a Slack command
+/// Run a Slack command (CLI entry point - formats and prints)
+#[cfg(not(tarpaulin_include))]
 pub async fn run(command: SlackCommands) -> Result<()> {
     match command {
         SlackCommands::Auth {
@@ -111,10 +110,11 @@ async fn cmd_auth(token: Option<&str>, user_token: Option<&str>, port: u16) -> R
 
 /// List channels
 async fn cmd_channels(json: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let channels = channels::list_channels(&client).await?;
+    let client = SlackClient::new()?;
+    let channels = service::list_channels(&client).await?;
     let format = if json {
         OutputFormat::Json
     } else {
@@ -127,11 +127,11 @@ async fn cmd_channels(json: bool) -> Result<()> {
 
 /// Get channel info
 async fn cmd_info(channel: &str, json: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let channel_id = channels::resolve_channel(&client, channel).await?;
-    let info = channels::get_channel_info(&client, &channel_id).await?;
+    let client = SlackClient::new()?;
+    let info = service::get_channel_info(&client, channel).await?;
     let format = if json {
         OutputFormat::Json
     } else {
@@ -144,11 +144,11 @@ async fn cmd_info(channel: &str, json: bool) -> Result<()> {
 
 /// Send a message
 async fn cmd_send(channel: &str, text: &str) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let channel_id = channels::resolve_channel(&client, channel).await?;
-    let (sent_channel, ts) = messages::send_message(&client, &channel_id, text).await?;
+    let client = SlackClient::new()?;
+    let (sent_channel, ts) = service::send_message(&client, channel, text).await?;
 
     println!("Message sent to {} (ts: {})", sent_channel, ts);
     Ok(())
@@ -156,11 +156,11 @@ async fn cmd_send(channel: &str, text: &str) -> Result<()> {
 
 /// Get message history
 async fn cmd_history(channel: &str, limit: usize, json: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let channel_id = channels::resolve_channel(&client, channel).await?;
-    let messages = messages::get_history(&client, &channel_id, limit).await?;
+    let client = SlackClient::new()?;
+    let messages = service::get_history(&client, channel, limit).await?;
     let format = if json {
         OutputFormat::Json
     } else {
@@ -175,10 +175,11 @@ async fn cmd_history(channel: &str, limit: usize, json: bool) -> Result<()> {
 
 /// Search messages
 async fn cmd_search(query: &str, count: usize, json: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let results = search::search_messages(&client, query, count).await?;
+    let client = SlackClient::new()?;
+    let results = service::search_messages(&client, query, count).await?;
     let format = if json {
         OutputFormat::Json
     } else {
@@ -186,7 +187,7 @@ async fn cmd_search(query: &str, count: usize, json: bool) -> Result<()> {
     };
 
     // Build user lookup for resolving DM user IDs to names
-    let user_lookup = channels::build_user_lookup(&client).await?;
+    let user_lookup = service::build_user_lookup(&client).await?;
 
     display::output_search_results(&results, format, &user_lookup)?;
     Ok(())
@@ -194,10 +195,11 @@ async fn cmd_search(query: &str, count: usize, json: bool) -> Result<()> {
 
 /// List users
 async fn cmd_users(json: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let users = channels::list_users(&client).await?;
+    let client = SlackClient::new()?;
+    let users = service::list_users(&client).await?;
     let format = if json {
         OutputFormat::Json
     } else {
@@ -210,7 +212,7 @@ async fn cmd_users(json: bool) -> Result<()> {
 
 /// Show configuration status
 fn cmd_config() -> Result<()> {
-    let config = load_config()?;
+    let config = service::get_config()?;
 
     display::output_config_status(
         config.is_configured,
@@ -271,13 +273,10 @@ async fn cmd_whoami() -> Result<()> {
 
 /// Tidy channels - mark as read if no mentions
 async fn cmd_tidy(dry_run: bool) -> Result<()> {
-    let client = SlackClient::new()?;
-    if !client.config().oauth.has_user_token() {
-        anyhow::bail!("User token required for tidy. Run `hu slack auth --user-token <token>`");
-    }
+    let config = service::get_config()?;
+    service::ensure_user_token(&config)?;
 
-    // Get user info for mention detection
-    let config = load_config()?;
+    let client = SlackClient::new()?;
     let token = config.oauth.user_token.as_deref().unwrap();
     let result = verify_token(token).await?;
 
@@ -321,13 +320,5 @@ async fn cmd_tidy(dry_run: bool) -> Result<()> {
     println!("  Has mentions:   {}", has_mentions);
     println!("  Already read:   {}", skipped);
 
-    Ok(())
-}
-
-/// Check if Slack is configured, bail if not
-pub(super) fn check_configured(client: &SlackClient) -> Result<()> {
-    if !client.config().is_configured {
-        anyhow::bail!("Slack is not configured. Run `hu slack auth` to authenticate.");
-    }
     Ok(())
 }

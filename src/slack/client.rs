@@ -32,16 +32,17 @@ impl SlackClient {
         Ok(Self { config, http })
     }
 
-    /// Get a reference to the current config
-    #[must_use]
-    pub const fn config(&self) -> &SlackConfig {
-        &self.config
-    }
-
     /// Create a client for testing with explicit config and http client
     #[cfg(test)]
     pub fn with_config(config: SlackConfig, http: Client) -> Self {
         Self { config, http }
+    }
+
+    /// Get a reference to the current config (for testing)
+    #[cfg(test)]
+    #[must_use]
+    pub const fn config(&self) -> &SlackConfig {
+        &self.config
     }
 
     /// Get the bot token

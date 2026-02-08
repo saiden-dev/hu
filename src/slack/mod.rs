@@ -10,18 +10,18 @@
 //! - List users
 //! - Show configuration status
 //!
-//! # Examples
+//! # CLI Usage
+//! Use [`run`] for CLI commands that format and print output.
 //!
-//! ```no_run
-//! use hu::slack::{run, SlackCommands};
-//!
-//! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
-//!     // List channels
-//!     run(SlackCommands::Channels { json: false }).await?;
-//!     Ok(())
-//! }
-//! ```
+//! # Programmatic Usage (MCP/HTTP)
+//! Use the reusable functions that return typed data:
+//! - [`get_config`] - Get configuration status
+//! - [`list_channels`] - List all channels
+//! - [`get_channel_info`] - Get channel details
+//! - [`get_history`] - Get message history
+//! - [`send_message`] - Send a message
+//! - [`search_messages`] - Search messages
+//! - [`list_users`] - List workspace users
 
 mod auth;
 mod channels;
@@ -31,12 +31,17 @@ mod display;
 mod handlers;
 mod messages;
 mod search;
+mod service;
 mod tidy;
 mod types;
 
+use anyhow::Result;
 use clap::Subcommand;
 
+use client::SlackClient;
+pub use config::SlackConfig;
 pub use handlers::run;
+pub use types::{SlackChannel, SlackMessage, SlackSearchResult, SlackUser};
 
 /// Slack subcommands
 #[derive(Subcommand, Debug)]
@@ -112,6 +117,72 @@ pub enum SlackCommands {
         #[arg(short, long)]
         dry_run: bool,
     },
+}
+
+// ============================================================================
+// Reusable functions for MCP/HTTP - return typed data, never print
+// ============================================================================
+
+/// Get Slack configuration status (for MCP/HTTP)
+#[allow(dead_code)]
+pub fn get_config() -> Result<SlackConfig> {
+    service::get_config()
+}
+
+/// List all channels (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_channels() -> Result<Vec<SlackChannel>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SlackClient::new()?;
+    service::list_channels(&client).await
+}
+
+/// Get channel info by name or ID (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn get_channel_info(channel: &str) -> Result<SlackChannel> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SlackClient::new()?;
+    service::get_channel_info(&client, channel).await
+}
+
+/// Get message history for a channel (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn get_history(channel: &str, limit: usize) -> Result<Vec<SlackMessage>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SlackClient::new()?;
+    service::get_history(&client, channel, limit).await
+}
+
+/// Send a message to a channel (for MCP/HTTP)
+/// Returns (channel_id, timestamp)
+#[allow(dead_code)]
+pub async fn send_message(channel: &str, text: &str) -> Result<(String, String)> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SlackClient::new()?;
+    service::send_message(&client, channel, text).await
+}
+
+/// Search messages (for MCP/HTTP) - requires user token
+#[allow(dead_code)]
+pub async fn search_messages(query: &str, count: usize) -> Result<SlackSearchResult> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    service::ensure_user_token(&config)?;
+    let client = SlackClient::new()?;
+    service::search_messages(&client, query, count).await
+}
+
+/// List users in the workspace (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_users() -> Result<Vec<SlackUser>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SlackClient::new()?;
+    service::list_users(&client).await
 }
 
 #[cfg(test)]
