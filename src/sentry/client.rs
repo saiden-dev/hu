@@ -3,6 +3,7 @@
 use anyhow::Result;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
+use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -12,6 +13,34 @@ use super::types::{Event, Issue};
 const SENTRY_API_URL: &str = "https://sentry.io/api/0";
 const MAX_RETRIES: u32 = 3;
 const DEFAULT_RETRY_SECS: u64 = 5;
+
+/// Trait for Sentry API operations (enables testing with mocks)
+pub trait SentryApi {
+    /// List issues for organization
+    fn list_issues(
+        &self,
+        query: Option<&str>,
+        limit: usize,
+    ) -> impl Future<Output = Result<Vec<Issue>>> + Send;
+
+    /// List issues for a specific project
+    fn list_project_issues(
+        &self,
+        project: &str,
+        query: Option<&str>,
+        limit: usize,
+    ) -> impl Future<Output = Result<Vec<Issue>>> + Send;
+
+    /// Get a single issue by ID
+    fn get_issue(&self, issue_id: &str) -> impl Future<Output = Result<Issue>> + Send;
+
+    /// List events for an issue
+    fn list_issue_events(
+        &self,
+        issue_id: &str,
+        limit: usize,
+    ) -> impl Future<Output = Result<Vec<Event>>> + Send;
+}
 
 /// Sentry API client
 pub struct SentryClient {
@@ -25,11 +54,6 @@ impl SentryClient {
         let config = load_config()?;
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;
         Ok(Self { config, http })
-    }
-
-    /// Get config reference
-    pub fn config(&self) -> &SentryConfig {
-        &self.config
     }
 
     /// Get auth token
@@ -186,5 +210,28 @@ impl SentryClient {
                 anyhow::anyhow!("Parse error: {}: {}", e, &text[..text.len().min(200)])
             });
         }
+    }
+}
+
+impl SentryApi for SentryClient {
+    async fn list_issues(&self, query: Option<&str>, limit: usize) -> Result<Vec<Issue>> {
+        SentryClient::list_issues(self, query, limit).await
+    }
+
+    async fn list_project_issues(
+        &self,
+        project: &str,
+        query: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Issue>> {
+        SentryClient::list_project_issues(self, project, query, limit).await
+    }
+
+    async fn get_issue(&self, issue_id: &str) -> Result<Issue> {
+        SentryClient::get_issue(self, issue_id).await
+    }
+
+    async fn list_issue_events(&self, issue_id: &str, limit: usize) -> Result<Vec<Event>> {
+        SentryClient::list_issue_events(self, issue_id, limit).await
     }
 }

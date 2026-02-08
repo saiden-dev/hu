@@ -1,17 +1,31 @@
 //! Sentry integration
 //!
 //! List and view issues from Sentry.
+//!
+//! # CLI Usage
+//! Use [`run`] for CLI commands that format and print output.
+//!
+//! # Programmatic Usage (MCP/HTTP)
+//! Use the reusable functions that return typed data:
+//! - [`get_config`] - Get configuration status
+//! - [`list_issues`] - List issues with filters
+//! - [`get_issue`] - Get issue details
+//! - [`list_events`] - List events for an issue
 
 mod client;
 mod config;
 mod display;
+mod service;
 pub mod types;
 
 use anyhow::Result;
 use clap::Subcommand;
 
 use client::SentryClient;
+pub use config::SentryConfig;
+pub use service::{EventOptions, IssueOptions};
 use types::OutputFormat;
+pub use types::{Event, Issue};
 
 /// Sentry subcommands
 #[derive(Debug, Subcommand)]
@@ -73,7 +87,8 @@ pub enum SentryCommand {
     },
 }
 
-/// Run a Sentry command
+/// Run a Sentry command (CLI entry point - formats and prints)
+#[cfg(not(tarpaulin_include))]
 pub async fn run(cmd: SentryCommand) -> Result<()> {
     match cmd {
         SentryCommand::Config => cmd_config(),
@@ -82,53 +97,85 @@ pub async fn run(cmd: SentryCommand) -> Result<()> {
             query,
             limit,
             json,
-        } => cmd_issues(project.as_deref(), query.as_deref(), limit, json).await,
+        } => cmd_issues(project, query, limit, json).await,
         SentryCommand::Show { issue, json } => cmd_show(&issue, json).await,
         SentryCommand::Events { issue, limit, json } => cmd_events(&issue, limit, json).await,
         SentryCommand::Auth { token, org } => cmd_auth(&token, &org),
     }
 }
 
-/// Check if client is configured
-fn check_configured(client: &SentryClient) -> Result<()> {
-    if !client.config().is_configured() {
-        anyhow::bail!(
-            "Sentry not configured. Run: hu sentry auth <token> --org <org>\n\
-             Or set SENTRY_AUTH_TOKEN and SENTRY_ORG environment variables."
-        );
-    }
-    Ok(())
+// ============================================================================
+// Reusable functions for MCP/HTTP - return typed data, never print
+// ============================================================================
+
+/// Get Sentry configuration status (for MCP/HTTP)
+#[allow(dead_code)]
+pub fn get_config() -> Result<SentryConfig> {
+    service::get_config()
 }
+
+/// List issues with filters (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_issues(opts: &IssueOptions) -> Result<Vec<Issue>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SentryClient::new()?;
+    service::list_issues(&client, opts).await
+}
+
+/// Get issue details by ID (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn get_issue(issue_id: &str) -> Result<Issue> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SentryClient::new()?;
+    service::get_issue(&client, issue_id).await
+}
+
+/// List events for an issue (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_events(opts: &EventOptions) -> Result<Vec<Event>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = SentryClient::new()?;
+    service::list_events(&client, opts).await
+}
+
+// ============================================================================
+// CLI command handlers - create client, call service, format and print
+// ============================================================================
 
 /// Show config status
 fn cmd_config() -> Result<()> {
-    let config = config::load_config()?;
+    let config = service::get_config()?;
     display::output_config_status(&config);
     Ok(())
 }
 
 /// Set auth token
 fn cmd_auth(token: &str, org: &str) -> Result<()> {
-    config::save_auth_token(token, org)?;
+    service::save_auth(token, org)?;
     println!("Sentry auth token saved for organization: {}", org);
     Ok(())
 }
 
 /// List issues
 async fn cmd_issues(
-    project: Option<&str>,
-    query: Option<&str>,
+    project: Option<String>,
+    query: Option<String>,
     limit: usize,
     json: bool,
 ) -> Result<()> {
-    let client = SentryClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let issues = if let Some(proj) = project {
-        client.list_project_issues(proj, query, limit).await?
-    } else {
-        client.list_issues(query, limit).await?
+    let client = SentryClient::new()?;
+    let opts = IssueOptions {
+        project,
+        query,
+        limit,
     };
+    let issues = service::list_issues(&client, &opts).await?;
 
     let format = if json {
         OutputFormat::Json
@@ -142,10 +189,11 @@ async fn cmd_issues(
 
 /// Show issue details
 async fn cmd_show(issue_id: &str, json: bool) -> Result<()> {
-    let client = SentryClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let issue = client.get_issue(issue_id).await?;
+    let client = SentryClient::new()?;
+    let issue = service::get_issue(&client, issue_id).await?;
 
     let format = if json {
         OutputFormat::Json
@@ -159,10 +207,15 @@ async fn cmd_show(issue_id: &str, json: bool) -> Result<()> {
 
 /// List events for an issue
 async fn cmd_events(issue_id: &str, limit: usize, json: bool) -> Result<()> {
-    let client = SentryClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let events = client.list_issue_events(issue_id, limit).await?;
+    let client = SentryClient::new()?;
+    let opts = EventOptions {
+        issue_id: issue_id.to_string(),
+        limit,
+    };
+    let events = service::list_events(&client, &opts).await?;
 
     let format = if json {
         OutputFormat::Json
