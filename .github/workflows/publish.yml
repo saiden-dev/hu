@@ -7,7 +7,6 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: crates-io
     permissions:
       id-token: write
       contents: read
