@@ -1,6 +1,18 @@
 //! PagerDuty integration
 //!
 //! View on-call schedules and incidents.
+//!
+//! # CLI Usage
+//! Use [`run`] for CLI commands that format and print output.
+//!
+//! # Programmatic Usage (MCP/HTTP)
+//! Use the reusable functions that return typed data:
+//! - [`get_config`] - Get configuration status
+//! - [`list_oncalls`] - List on-call users
+//! - [`list_alerts`] - List active alerts (triggered + acknowledged)
+//! - [`list_incidents`] - List incidents with filters
+//! - [`get_incident`] - Get incident details
+//! - [`get_current_user`] - Get current user info
 
 mod cli;
 mod client;
@@ -14,10 +26,13 @@ use anyhow::Result;
 pub use cli::PagerDutyCommand;
 use cli::StatusFilter;
 use client::PagerDutyClient;
-use service::{IncidentOptions, OncallOptions};
+pub use config::PagerDutyConfig;
+pub use service::{IncidentOptions, OncallOptions};
+pub use types::{Incident, Oncall, User};
 use types::{IncidentStatus, OutputFormat};
 
-/// Run a PagerDuty command
+/// Run a PagerDuty command (CLI entry point - formats and prints)
+#[cfg(not(tarpaulin_include))]
 pub async fn run(cmd: PagerDutyCommand) -> Result<()> {
     match cmd {
         PagerDutyCommand::Config => cmd_config(),
@@ -37,6 +52,65 @@ pub async fn run(cmd: PagerDutyCommand) -> Result<()> {
         PagerDutyCommand::Whoami { json } => cmd_whoami(json).await,
     }
 }
+
+// ============================================================================
+// Reusable functions for MCP/HTTP - return typed data, never print
+// ============================================================================
+
+/// Get PagerDuty configuration status (for MCP/HTTP)
+#[allow(dead_code)]
+pub fn get_config() -> Result<PagerDutyConfig> {
+    service::get_config()
+}
+
+/// List on-call users (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_oncalls(opts: &OncallOptions) -> Result<Vec<Oncall>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = PagerDutyClient::new()?;
+    service::list_oncalls(&client, opts).await
+}
+
+/// List active alerts - triggered + acknowledged only (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_alerts(limit: usize) -> Result<Vec<Incident>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = PagerDutyClient::new()?;
+    service::list_alerts(&client, limit).await
+}
+
+/// List incidents with filters (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_incidents(opts: &IncidentOptions) -> Result<Vec<Incident>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = PagerDutyClient::new()?;
+    service::list_incidents(&client, opts).await
+}
+
+/// Get incident details by ID (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn get_incident(id: &str) -> Result<Incident> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = PagerDutyClient::new()?;
+    service::get_incident(&client, id).await
+}
+
+/// Get current user info (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn get_current_user() -> Result<User> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = PagerDutyClient::new()?;
+    service::get_current_user(&client).await
+}
+
+// ============================================================================
+// CLI command handlers - create client, call service, format and print
+// ============================================================================
 
 /// Show config status
 fn cmd_config() -> Result<()> {
