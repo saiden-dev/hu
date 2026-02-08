@@ -3,6 +3,7 @@
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -13,6 +14,18 @@ use super::types::{Incident, Issue};
 mod tests;
 
 const NERDGRAPH_URL: &str = "https://api.newrelic.com/graphql";
+
+/// Trait for New Relic API operations (enables testing with mocks)
+pub trait NewRelicApi {
+    /// List recent issues
+    fn list_issues(&self, limit: usize) -> impl Future<Output = Result<Vec<Issue>>> + Send;
+
+    /// List recent incidents
+    fn list_incidents(&self, limit: usize) -> impl Future<Output = Result<Vec<Incident>>> + Send;
+
+    /// Run NRQL query
+    fn run_nrql(&self, nrql: &str) -> impl Future<Output = Result<Vec<serde_json::Value>>> + Send;
+}
 const MAX_RETRIES: u32 = 3;
 const DEFAULT_RETRY_SECS: u64 = 5;
 
@@ -48,11 +61,6 @@ impl NewRelicClient {
         let config = load_config()?;
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;
         Ok(Self { config, http })
-    }
-
-    /// Get config reference
-    pub fn config(&self) -> &NewRelicConfig {
-        &self.config
     }
 
     /// Get API key
@@ -331,5 +339,25 @@ impl NewRelicClient {
     pub fn with_config(config: NewRelicConfig) -> Result<Self> {
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;
         Ok(Self { config, http })
+    }
+
+    /// Get config reference (for testing)
+    #[cfg(test)]
+    pub fn config(&self) -> &NewRelicConfig {
+        &self.config
+    }
+}
+
+impl NewRelicApi for NewRelicClient {
+    async fn list_issues(&self, limit: usize) -> Result<Vec<Issue>> {
+        NewRelicClient::list_issues(self, limit).await
+    }
+
+    async fn list_incidents(&self, limit: usize) -> Result<Vec<Incident>> {
+        NewRelicClient::list_incidents(self, limit).await
+    }
+
+    async fn run_nrql(&self, nrql: &str) -> Result<Vec<serde_json::Value>> {
+        NewRelicClient::run_nrql(self, nrql).await
     }
 }

@@ -1,17 +1,30 @@
 //! New Relic integration
 //!
 //! Query incidents and run NRQL queries via NerdGraph.
+//!
+//! # CLI Usage
+//! Use [`run`] for CLI commands that format and print output.
+//!
+//! # Programmatic Usage (MCP/HTTP)
+//! Use the reusable functions that return typed data:
+//! - [`get_config`] - Get configuration status
+//! - [`list_issues`] - List recent issues
+//! - [`list_incidents`] - List recent incidents
+//! - [`run_nrql`] - Run NRQL query
 
 mod client;
 mod config;
 mod display;
+mod service;
 pub mod types;
 
 use anyhow::Result;
 use clap::Subcommand;
 
 use client::NewRelicClient;
+pub use config::NewRelicConfig;
 use types::OutputFormat;
+pub use types::{Incident, Issue};
 
 /// New Relic subcommands
 #[derive(Debug, Subcommand)]
@@ -62,7 +75,8 @@ pub enum NewRelicCommand {
     },
 }
 
-/// Run a New Relic command
+/// Run a New Relic command (CLI entry point - formats and prints)
+#[cfg(not(tarpaulin_include))]
 pub async fn run(cmd: NewRelicCommand) -> Result<()> {
     match cmd {
         NewRelicCommand::Config => cmd_config(),
@@ -73,37 +87,68 @@ pub async fn run(cmd: NewRelicCommand) -> Result<()> {
     }
 }
 
-/// Check if client is configured
-fn check_configured(client: &NewRelicClient) -> Result<()> {
-    if !client.config().is_configured() {
-        anyhow::bail!(
-            "New Relic not configured. Run: hu newrelic auth <key> --account <id>\n\
-             Or set NEW_RELIC_API_KEY and NEW_RELIC_ACCOUNT_ID environment variables."
-        );
-    }
-    Ok(())
+// ============================================================================
+// Reusable functions for MCP/HTTP - return typed data, never print
+// ============================================================================
+
+/// Get New Relic configuration status (for MCP/HTTP)
+#[allow(dead_code)]
+pub fn get_config() -> Result<NewRelicConfig> {
+    service::get_config()
 }
+
+/// List recent issues (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_issues(limit: usize) -> Result<Vec<Issue>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = NewRelicClient::new()?;
+    service::list_issues(&client, limit).await
+}
+
+/// List recent incidents (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn list_incidents(limit: usize) -> Result<Vec<Incident>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = NewRelicClient::new()?;
+    service::list_incidents(&client, limit).await
+}
+
+/// Run NRQL query (for MCP/HTTP)
+#[allow(dead_code)]
+pub async fn run_nrql(nrql: &str) -> Result<Vec<serde_json::Value>> {
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
+    let client = NewRelicClient::new()?;
+    service::run_nrql(&client, nrql).await
+}
+
+// ============================================================================
+// CLI command handlers - create client, call service, format and print
+// ============================================================================
 
 /// Show config status
 fn cmd_config() -> Result<()> {
-    let config = config::load_config()?;
+    let config = service::get_config()?;
     display::output_config_status(&config);
     Ok(())
 }
 
 /// Set auth
 fn cmd_auth(key: &str, account_id: i64) -> Result<()> {
-    config::save_config(key, account_id)?;
+    service::save_auth(key, account_id)?;
     println!("New Relic API key saved for account: {}", account_id);
     Ok(())
 }
 
 /// List issues
 async fn cmd_issues(limit: usize, json: bool) -> Result<()> {
-    let client = NewRelicClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let issues = client.list_issues(limit).await?;
+    let client = NewRelicClient::new()?;
+    let issues = service::list_issues(&client, limit).await?;
 
     let format = if json {
         OutputFormat::Json
@@ -117,10 +162,11 @@ async fn cmd_issues(limit: usize, json: bool) -> Result<()> {
 
 /// List incidents
 async fn cmd_incidents(limit: usize, json: bool) -> Result<()> {
-    let client = NewRelicClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let incidents = client.list_incidents(limit).await?;
+    let client = NewRelicClient::new()?;
+    let incidents = service::list_incidents(&client, limit).await?;
 
     let format = if json {
         OutputFormat::Json
@@ -134,10 +180,11 @@ async fn cmd_incidents(limit: usize, json: bool) -> Result<()> {
 
 /// Run NRQL query
 async fn cmd_query(nrql: &str, json: bool) -> Result<()> {
-    let client = NewRelicClient::new()?;
-    check_configured(&client)?;
+    let config = service::get_config()?;
+    service::ensure_configured(&config)?;
 
-    let results = client.run_nrql(nrql).await?;
+    let client = NewRelicClient::new()?;
+    let results = service::run_nrql(&client, nrql).await?;
 
     let format = if json {
         OutputFormat::Json
@@ -209,48 +256,44 @@ mod tests {
     }
 
     #[test]
-    fn test_check_configured_with_configured_client() {
+    fn test_ensure_configured_with_configured() {
         let config = config::NewRelicConfig {
             api_key: Some("NRAK-configured".to_string()),
             account_id: Some(99999),
         };
-        let client = NewRelicClient::with_config(config).unwrap();
-        let result = check_configured(&client);
+        let result = service::ensure_configured(&config);
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_check_configured_with_unconfigured_client() {
+    fn test_ensure_configured_with_unconfigured() {
         let config = config::NewRelicConfig {
             api_key: None,
             account_id: None,
         };
-        let client = NewRelicClient::with_config(config).unwrap();
-        let result = check_configured(&client);
+        let result = service::ensure_configured(&config);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("not configured"));
     }
 
     #[test]
-    fn test_check_configured_partial_api_key_only() {
+    fn test_ensure_configured_partial_api_key_only() {
         let config = config::NewRelicConfig {
             api_key: Some("NRAK-partial".to_string()),
             account_id: None,
         };
-        let client = NewRelicClient::with_config(config).unwrap();
-        let result = check_configured(&client);
+        let result = service::ensure_configured(&config);
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_check_configured_partial_account_only() {
+    fn test_ensure_configured_partial_account_only() {
         let config = config::NewRelicConfig {
             api_key: None,
             account_id: Some(12345),
         };
-        let client = NewRelicClient::with_config(config).unwrap();
-        let result = check_configured(&client);
+        let result = service::ensure_configured(&config);
         assert!(result.is_err());
     }
 
