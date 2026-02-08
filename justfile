@@ -11,9 +11,17 @@ build:
 run *args:
     cargo run -- {{args}}
 
-# Run tests
-test:
+# Run unit tests only
+unit:
     cargo test
+
+# Run tests with coverage
+coverage:
+    cargo tarpaulin --out Html
+
+# Run all checks and tests (fix + check + tests + coverage)
+test: fix check unit coverage
+    @echo "All checks passed"
 
 # Format code
 fmt:
@@ -28,6 +36,11 @@ check:
     cargo fmt --check
     cargo clippy -- -D warnings
 
+# Fix all formatting and lints
+fix:
+    cargo fmt
+    cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
+
 # Build release
 release:
     cargo build --release
@@ -40,6 +53,5 @@ install:
 clean:
     cargo clean
 
-# Full check before commit
-pre-commit: check test
-    @echo "All checks passed"
+# Alias for test (full check before commit)
+pre-commit: test
