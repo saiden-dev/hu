@@ -6,6 +6,8 @@ use super::cli::SyncArgs;
 
 pub fn run(args: SyncArgs) -> Result<()> {
     let options = SyncOptions {
+        pull: args.pull,
+        trigger: args.trigger,
         no_commit: args.no_commit,
         no_push: args.no_push,
         message: args.message,
@@ -19,7 +21,23 @@ pub fn run(args: SyncArgs) -> Result<()> {
         return Ok(());
     }
 
-    if result.files_committed == 0 {
+    if result.pulled {
+        println!("\x1b[32m\u{2713}\x1b[0m Pulled from origin");
+    }
+
+    // Trigger mode: empty commit
+    if args.trigger {
+        if let Some(hash) = &result.commit_hash {
+            let branch = result.branch.as_deref().unwrap_or("unknown");
+            println!("\x1b[32m\u{2713}\x1b[0m Empty commit [{}] {}", branch, hash);
+        }
+        if result.pushed {
+            println!("\x1b[32m\u{2713}\x1b[0m Pushed to origin (CI triggered)");
+        }
+        return Ok(());
+    }
+
+    if result.files_committed == 0 && result.commit_hash.is_none() {
         println!("Nothing to commit, working tree clean");
         return Ok(());
     }
@@ -67,6 +85,8 @@ mod tests {
     fn sync_args_to_options() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
+            pull: true,
+            trigger: false,
             no_commit: true,
             no_push: true,
             message: Some("test".to_string()),
@@ -74,12 +94,16 @@ mod tests {
         };
 
         let options = SyncOptions {
+            pull: args.pull,
+            trigger: args.trigger,
             no_commit: args.no_commit,
             no_push: args.no_push,
             message: args.message.clone(),
             path: args.path.clone(),
         };
 
+        assert!(options.pull);
+        assert!(!options.trigger);
         assert!(options.no_commit);
         assert!(options.no_push);
         assert_eq!(options.message.unwrap(), "test");
@@ -87,9 +111,36 @@ mod tests {
     }
 
     #[test]
+    fn sync_args_trigger_mode() {
+        let args = SyncArgs {
+            path: None,
+            pull: false,
+            trigger: true,
+            no_commit: false,
+            no_push: false,
+            message: Some("Retrigger build".to_string()),
+            json: false,
+        };
+
+        let options = SyncOptions {
+            pull: args.pull,
+            trigger: args.trigger,
+            no_commit: args.no_commit,
+            no_push: args.no_push,
+            message: args.message.clone(),
+            path: args.path.clone(),
+        };
+
+        assert!(options.trigger);
+        assert_eq!(options.message.unwrap(), "Retrigger build");
+    }
+
+    #[test]
     fn run_not_git_repo() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
+            pull: false,
+            trigger: false,
             no_commit: false,
             no_push: false,
             message: None,
@@ -103,6 +154,8 @@ mod tests {
     fn run_json_not_repo() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
+            pull: false,
+            trigger: false,
             no_commit: false,
             no_push: false,
             message: None,

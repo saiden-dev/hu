@@ -32,6 +32,8 @@ impl GitStatus {
 /// Result of sync operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult {
+    /// Whether pull was performed
+    pub pulled: bool,
     /// Number of files committed
     pub files_committed: usize,
     /// Commit hash (short form)
@@ -45,6 +47,10 @@ pub struct SyncResult {
 /// Options for sync operation
 #[derive(Debug, Clone, Default)]
 pub struct SyncOptions {
+    /// Pull before push (two-way sync)
+    pub pull: bool,
+    /// Create empty commit and push to trigger CI
+    pub trigger: bool,
     /// Skip git commit
     pub no_commit: bool,
     /// Skip git push
@@ -139,6 +145,8 @@ mod tests {
     #[test]
     fn sync_options_default() {
         let opts = SyncOptions::default();
+        assert!(!opts.pull);
+        assert!(!opts.trigger);
         assert!(!opts.no_commit);
         assert!(!opts.no_push);
         assert!(opts.message.is_none());
@@ -146,8 +154,29 @@ mod tests {
     }
 
     #[test]
+    fn sync_options_with_pull() {
+        let opts = SyncOptions {
+            pull: true,
+            ..Default::default()
+        };
+        assert!(opts.pull);
+    }
+
+    #[test]
+    fn sync_options_with_trigger() {
+        let opts = SyncOptions {
+            trigger: true,
+            message: Some("Retrigger CI".to_string()),
+            ..Default::default()
+        };
+        assert!(opts.trigger);
+        assert_eq!(opts.message.unwrap(), "Retrigger CI");
+    }
+
+    #[test]
     fn sync_result_debug() {
         let result = SyncResult {
+            pulled: true,
             files_committed: 5,
             commit_hash: Some("abc1234".to_string()),
             pushed: true,
@@ -155,5 +184,20 @@ mod tests {
         };
         let debug = format!("{:?}", result);
         assert!(debug.contains("abc1234"));
+        assert!(debug.contains("pulled: true"));
+    }
+
+    #[test]
+    fn sync_result_trigger_mode() {
+        let result = SyncResult {
+            pulled: false,
+            files_committed: 0,
+            commit_hash: Some("def5678".to_string()),
+            pushed: true,
+            branch: Some("feature".to_string()),
+        };
+        assert_eq!(result.files_committed, 0);
+        assert!(result.commit_hash.is_some());
+        assert!(result.pushed);
     }
 }

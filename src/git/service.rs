@@ -119,6 +119,19 @@ pub fn push(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Pull from remote
+pub fn pull(path: &Path) -> Result<()> {
+    run_git(&["pull", "--rebase"], path)?;
+    Ok(())
+}
+
+/// Create an empty commit
+pub fn empty_commit(path: &Path, message: &str) -> Result<String> {
+    run_git(&["commit", "--allow-empty", "-m", message], path)?;
+    let hash = run_git(&["rev-parse", "--short", "HEAD"], path)?;
+    Ok(hash.trim().to_string())
+}
+
 /// Check if there's a remote configured
 pub fn has_remote(path: &Path) -> bool {
     run_git(&["remote"], path)
@@ -137,23 +150,43 @@ pub fn sync(options: &SyncOptions) -> Result<SyncResult> {
         anyhow::bail!("Not a git repository: {}", path.display());
     }
 
-    let status = get_status(&path)?;
-    if status.is_clean() {
-        return Ok(SyncResult {
-            files_committed: 0,
-            commit_hash: None,
-            pushed: false,
-            branch: get_branch(&path).ok(),
-        });
-    }
-
-    let file_count = status.file_count();
     let mut result = SyncResult {
-        files_committed: file_count,
+        pulled: false,
+        files_committed: 0,
         commit_hash: None,
         pushed: false,
         branch: get_branch(&path).ok(),
     };
+
+    // Pull first if requested
+    if options.pull && has_remote(&path) {
+        pull(&path)?;
+        result.pulled = true;
+    }
+
+    // Handle trigger mode: empty commit + push
+    if options.trigger {
+        let message = options
+            .message
+            .clone()
+            .unwrap_or_else(|| "Trigger CI".to_string());
+        let hash = empty_commit(&path, &message)?;
+        result.commit_hash = Some(hash);
+
+        if !options.no_push && has_remote(&path) {
+            push(&path)?;
+            result.pushed = true;
+        }
+        return Ok(result);
+    }
+
+    let status = get_status(&path)?;
+    if status.is_clean() {
+        return Ok(result);
+    }
+
+    let file_count = status.file_count();
+    result.files_committed = file_count;
 
     if options.no_commit {
         return Ok(result);
@@ -330,5 +363,19 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Not a git repository"));
+    }
+
+    #[test]
+    fn pull_function_exists() {
+        // Test that pull function exists and fails gracefully on non-repo
+        let result = pull(Path::new("/tmp"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn empty_commit_function_exists() {
+        // Test that empty_commit function exists and fails gracefully on non-repo
+        let result = empty_commit(Path::new("/tmp"), "test");
+        assert!(result.is_err());
     }
 }

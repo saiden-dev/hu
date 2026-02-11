@@ -21,6 +21,12 @@ pub enum GhCommand {
 pub struct SyncArgs {
     /// Path to git repository (default: current directory)
     pub path: Option<PathBuf>,
+    /// Pull before push (two-way sync)
+    #[arg(long, short)]
+    pub pull: bool,
+    /// Create empty commit and push to trigger CI
+    #[arg(long, short)]
+    pub trigger: bool,
     /// Skip git commit
     #[arg(long)]
     pub no_commit: bool,

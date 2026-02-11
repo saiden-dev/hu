@@ -103,6 +103,7 @@ fn truncate_url_http() {
 #[test]
 fn format_sync_result_clean() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 0,
         commit_hash: None,
         pushed: false,
@@ -115,6 +116,7 @@ fn format_sync_result_clean() {
 #[test]
 fn format_sync_result_committed() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 3,
         commit_hash: Some("abc1234".to_string()),
         pushed: false,
@@ -129,6 +131,7 @@ fn format_sync_result_committed() {
 #[test]
 fn format_sync_result_single_file() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 1,
         commit_hash: Some("def5678".to_string()),
         pushed: true,
@@ -143,6 +146,7 @@ fn format_sync_result_single_file() {
 #[test]
 fn format_sync_result_json() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 2,
         commit_hash: Some("xyz".to_string()),
         pushed: true,
@@ -213,6 +217,7 @@ fn format_docs_long_title_truncated() {
 #[test]
 fn format_sync_result_no_push() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 1,
         commit_hash: Some("abc".to_string()),
         pushed: false,
@@ -231,6 +236,7 @@ fn truncate_url_already_short_after_strip() {
 #[test]
 fn format_sync_json_zero_files() {
     let result = crate::git::SyncResult {
+        pulled: false,
         files_committed: 0,
         commit_hash: None,
         pushed: false,
