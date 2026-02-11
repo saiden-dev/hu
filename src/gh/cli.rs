@@ -36,6 +36,12 @@ pub struct SyncArgs {
     /// Custom commit message
     #[arg(long, short)]
     pub message: Option<String>,
+    /// Log sync to file (one line per sync)
+    #[arg(long, short)]
+    pub log: bool,
+    /// Log file path (default: ~/.hu/gh-sync.log)
+    #[arg(long)]
+    pub log_file: Option<PathBuf>,
     /// Output as JSON
     #[arg(long, short)]
     pub json: bool,
