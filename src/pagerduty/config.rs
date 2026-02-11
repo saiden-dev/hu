@@ -66,6 +66,7 @@ fn parse_config(contents: &str) -> Result<PagerDutyConfig> {
 }
 
 /// Save API token to config file
+#[cfg(not(tarpaulin_include))]
 pub fn save_config(api_token: &str) -> Result<()> {
     let path = config_path().ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
 

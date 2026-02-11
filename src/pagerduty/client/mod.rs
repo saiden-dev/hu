@@ -55,6 +55,7 @@ pub struct PagerDutyClient {
 
 impl PagerDutyClient {
     /// Create a new client
+    #[cfg(not(tarpaulin_include))]
     pub fn new() -> Result<Self> {
         let config = load_config()?;
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;

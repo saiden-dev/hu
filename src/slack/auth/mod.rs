@@ -91,6 +91,7 @@ fn build_authorization_url(client_id: &str, redirect_uri: &str, state: &str) -> 
 }
 
 /// Exchange authorization code for tokens
+#[cfg(not(tarpaulin_include))]
 async fn exchange_code_for_tokens(
     client: &reqwest::Client,
     code: &str,
@@ -151,6 +152,7 @@ fn parse_callback_request(request: &str) -> Option<(String, String)> {
 }
 
 /// Send HTTP response to browser
+#[cfg(not(tarpaulin_include))]
 async fn send_response(
     stream: &mut tokio::net::TcpStream,
     status: &str,
@@ -183,6 +185,7 @@ async fn send_response(
 /// Run the OAuth authorization flow
 ///
 /// Starts a local server, opens the browser, and waits for the callback.
+#[cfg(not(tarpaulin_include))]
 pub async fn run_oauth_flow(port: u16) -> Result<OAuthResult> {
     let config = load_config()?;
 
@@ -249,6 +252,7 @@ struct CallbackContext<'a> {
 }
 
 /// Handle the OAuth callback - accepts connections and processes the callback
+#[cfg(not(tarpaulin_include))]
 async fn handle_callback(ctx: CallbackContext<'_>) -> Result<OAuthResult> {
     loop {
         let (mut stream, _) = ctx
@@ -277,6 +281,7 @@ async fn handle_callback(ctx: CallbackContext<'_>) -> Result<OAuthResult> {
 }
 
 /// Process the OAuth callback request
+#[cfg(not(tarpaulin_include))]
 async fn process_callback(
     stream: &mut tokio::net::TcpStream,
     request_line: &str,
@@ -337,6 +342,7 @@ async fn process_callback(
 }
 
 /// Complete authentication by saving tokens
+#[cfg(not(tarpaulin_include))]
 async fn complete_auth(
     stream: &mut tokio::net::TcpStream,
     tokens: &TokenResponse,

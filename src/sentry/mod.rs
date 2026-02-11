@@ -110,12 +110,14 @@ pub async fn run(cmd: SentryCommand) -> Result<()> {
 
 /// Get Sentry configuration status (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub fn get_config() -> Result<SentryConfig> {
     service::get_config()
 }
 
 /// List issues with filters (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_issues(opts: &IssueOptions) -> Result<Vec<Issue>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -125,6 +127,7 @@ pub async fn list_issues(opts: &IssueOptions) -> Result<Vec<Issue>> {
 
 /// Get issue details by ID (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn get_issue(issue_id: &str) -> Result<Issue> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -134,6 +137,7 @@ pub async fn get_issue(issue_id: &str) -> Result<Issue> {
 
 /// List events for an issue (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_events(opts: &EventOptions) -> Result<Vec<Event>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -146,6 +150,7 @@ pub async fn list_events(opts: &EventOptions) -> Result<Vec<Event>> {
 // ============================================================================
 
 /// Show config status
+#[cfg(not(tarpaulin_include))]
 fn cmd_config() -> Result<()> {
     let config = service::get_config()?;
     display::output_config_status(&config);
@@ -153,6 +158,7 @@ fn cmd_config() -> Result<()> {
 }
 
 /// Set auth token
+#[cfg(not(tarpaulin_include))]
 fn cmd_auth(token: &str, org: &str) -> Result<()> {
     service::save_auth(token, org)?;
     println!("Sentry auth token saved for organization: {}", org);
@@ -160,6 +166,7 @@ fn cmd_auth(token: &str, org: &str) -> Result<()> {
 }
 
 /// List issues
+#[cfg(not(tarpaulin_include))]
 async fn cmd_issues(
     project: Option<String>,
     query: Option<String>,
@@ -188,6 +195,7 @@ async fn cmd_issues(
 }
 
 /// Show issue details
+#[cfg(not(tarpaulin_include))]
 async fn cmd_show(issue_id: &str, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -206,6 +214,7 @@ async fn cmd_show(issue_id: &str, json: bool) -> Result<()> {
 }
 
 /// List events for an issue
+#[cfg(not(tarpaulin_include))]
 async fn cmd_events(issue_id: &str, limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;

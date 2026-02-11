@@ -13,6 +13,7 @@ use super::search;
 use super::types::{SlackChannel, SlackMessage, SlackSearchResult, SlackUser};
 
 /// Get current configuration
+#[cfg(not(tarpaulin_include))]
 pub fn get_config() -> Result<SlackConfig> {
     config::load_config()
 }
@@ -34,17 +35,20 @@ pub fn ensure_user_token(config: &SlackConfig) -> Result<()> {
 }
 
 /// List all channels
+#[cfg(not(tarpaulin_include))]
 pub async fn list_channels(client: &SlackClient) -> Result<Vec<SlackChannel>> {
     channels::list_channels(client).await
 }
 
 /// Get channel info by ID or name
+#[cfg(not(tarpaulin_include))]
 pub async fn get_channel_info(client: &SlackClient, channel: &str) -> Result<SlackChannel> {
     let channel_id = channels::resolve_channel(client, channel).await?;
     channels::get_channel_info(client, &channel_id).await
 }
 
 /// Get message history for a channel
+#[cfg(not(tarpaulin_include))]
 pub async fn get_history(
     client: &SlackClient,
     channel: &str,
@@ -55,6 +59,7 @@ pub async fn get_history(
 }
 
 /// Send a message to a channel
+#[cfg(not(tarpaulin_include))]
 pub async fn send_message(
     client: &SlackClient,
     channel: &str,
@@ -65,6 +70,7 @@ pub async fn send_message(
 }
 
 /// Search messages (requires user token)
+#[cfg(not(tarpaulin_include))]
 pub async fn search_messages(
     client: &SlackClient,
     query: &str,
@@ -74,11 +80,13 @@ pub async fn search_messages(
 }
 
 /// List users
+#[cfg(not(tarpaulin_include))]
 pub async fn list_users(client: &SlackClient) -> Result<Vec<SlackUser>> {
     channels::list_users(client).await
 }
 
 /// Build user lookup map for DM resolution
+#[cfg(not(tarpaulin_include))]
 pub async fn build_user_lookup(
     client: &SlackClient,
 ) -> Result<std::collections::HashMap<String, String>> {

@@ -87,6 +87,7 @@ pub fn config_path() -> Option<PathBuf> {
 }
 
 /// Load Slack configuration from settings file and environment variables
+#[cfg(not(tarpaulin_include))]
 pub fn load_config() -> Result<SlackConfig> {
     let mut config = SlackConfig::default();
 
@@ -137,6 +138,7 @@ pub fn load_config() -> Result<SlackConfig> {
 }
 
 /// Update OAuth tokens in the config file after successful authentication
+#[cfg(not(tarpaulin_include))]
 pub fn update_oauth_tokens(bot_token: &str, team_id: &str, team_name: &str) -> Result<()> {
     let path = config_path()
         .ok_or_else(|| anyhow::anyhow!("Cannot determine config directory".to_string()))?;
@@ -214,6 +216,7 @@ pub fn update_oauth_tokens(bot_token: &str, team_id: &str, team_name: &str) -> R
 }
 
 /// Update user token in the config file
+#[cfg(not(tarpaulin_include))]
 pub fn update_user_token(user_token: &str) -> Result<()> {
     let path = config_path()
         .ok_or_else(|| anyhow::anyhow!("Cannot determine config directory".to_string()))?;

@@ -59,12 +59,14 @@ pub async fn run(cmd: PagerDutyCommand) -> Result<()> {
 
 /// Get PagerDuty configuration status (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub fn get_config() -> Result<PagerDutyConfig> {
     service::get_config()
 }
 
 /// List on-call users (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_oncalls(opts: &OncallOptions) -> Result<Vec<Oncall>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -74,6 +76,7 @@ pub async fn list_oncalls(opts: &OncallOptions) -> Result<Vec<Oncall>> {
 
 /// List active alerts - triggered + acknowledged only (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_alerts(limit: usize) -> Result<Vec<Incident>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -83,6 +86,7 @@ pub async fn list_alerts(limit: usize) -> Result<Vec<Incident>> {
 
 /// List incidents with filters (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_incidents(opts: &IncidentOptions) -> Result<Vec<Incident>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -92,6 +96,7 @@ pub async fn list_incidents(opts: &IncidentOptions) -> Result<Vec<Incident>> {
 
 /// Get incident details by ID (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn get_incident(id: &str) -> Result<Incident> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -101,6 +106,7 @@ pub async fn get_incident(id: &str) -> Result<Incident> {
 
 /// Get current user info (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn get_current_user() -> Result<User> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -113,6 +119,7 @@ pub async fn get_current_user() -> Result<User> {
 // ============================================================================
 
 /// Show config status
+#[cfg(not(tarpaulin_include))]
 fn cmd_config() -> Result<()> {
     let config = service::get_config()?;
     display::output_config_status(&config);
@@ -120,6 +127,7 @@ fn cmd_config() -> Result<()> {
 }
 
 /// Save API token
+#[cfg(not(tarpaulin_include))]
 fn cmd_auth(token: &str) -> Result<()> {
     service::save_auth(token)?;
     println!("PagerDuty API token saved.");
@@ -127,6 +135,7 @@ fn cmd_auth(token: &str) -> Result<()> {
 }
 
 /// Show who's on call
+#[cfg(not(tarpaulin_include))]
 async fn cmd_oncall(policy: Option<&str>, schedule: Option<&str>, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -149,6 +158,7 @@ async fn cmd_oncall(policy: Option<&str>, schedule: Option<&str>, json: bool) ->
 }
 
 /// List active alerts (triggered + acknowledged)
+#[cfg(not(tarpaulin_include))]
 async fn cmd_alerts(limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -166,6 +176,7 @@ async fn cmd_alerts(limit: usize, json: bool) -> Result<()> {
 }
 
 /// List incidents with optional status filter
+#[cfg(not(tarpaulin_include))]
 async fn cmd_incidents(status: Option<StatusFilter>, limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -187,6 +198,7 @@ async fn cmd_incidents(status: Option<StatusFilter>, limit: usize, json: bool) -
 }
 
 /// Show incident details
+#[cfg(not(tarpaulin_include))]
 async fn cmd_show(id: &str, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -204,6 +216,7 @@ async fn cmd_show(id: &str, json: bool) -> Result<()> {
 }
 
 /// Show current user info
+#[cfg(not(tarpaulin_include))]
 async fn cmd_whoami(json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;

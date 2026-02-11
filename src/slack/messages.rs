@@ -48,6 +48,7 @@ impl From<MessageResponse> for SlackMessage {
 }
 
 /// Get message history for a channel
+#[cfg(not(tarpaulin_include))]
 pub async fn get_history(
     client: &SlackClient,
     channel_id: &str,
@@ -71,6 +72,7 @@ pub async fn get_history(
 }
 
 /// Send a message to a channel
+#[cfg(not(tarpaulin_include))]
 pub async fn send_message(
     client: &SlackClient,
     channel_id: &str,

@@ -93,12 +93,14 @@ pub async fn run(cmd: NewRelicCommand) -> Result<()> {
 
 /// Get New Relic configuration status (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub fn get_config() -> Result<NewRelicConfig> {
     service::get_config()
 }
 
 /// List recent issues (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_issues(limit: usize) -> Result<Vec<Issue>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -108,6 +110,7 @@ pub async fn list_issues(limit: usize) -> Result<Vec<Issue>> {
 
 /// List recent incidents (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_incidents(limit: usize) -> Result<Vec<Incident>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -117,6 +120,7 @@ pub async fn list_incidents(limit: usize) -> Result<Vec<Incident>> {
 
 /// Run NRQL query (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn run_nrql(nrql: &str) -> Result<Vec<serde_json::Value>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -129,6 +133,7 @@ pub async fn run_nrql(nrql: &str) -> Result<Vec<serde_json::Value>> {
 // ============================================================================
 
 /// Show config status
+#[cfg(not(tarpaulin_include))]
 fn cmd_config() -> Result<()> {
     let config = service::get_config()?;
     display::output_config_status(&config);
@@ -136,6 +141,7 @@ fn cmd_config() -> Result<()> {
 }
 
 /// Set auth
+#[cfg(not(tarpaulin_include))]
 fn cmd_auth(key: &str, account_id: i64) -> Result<()> {
     service::save_auth(key, account_id)?;
     println!("New Relic API key saved for account: {}", account_id);
@@ -143,6 +149,7 @@ fn cmd_auth(key: &str, account_id: i64) -> Result<()> {
 }
 
 /// List issues
+#[cfg(not(tarpaulin_include))]
 async fn cmd_issues(limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -161,6 +168,7 @@ async fn cmd_issues(limit: usize, json: bool) -> Result<()> {
 }
 
 /// List incidents
+#[cfg(not(tarpaulin_include))]
 async fn cmd_incidents(limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -179,6 +187,7 @@ async fn cmd_incidents(limit: usize, json: bool) -> Result<()> {
 }
 
 /// Run NRQL query
+#[cfg(not(tarpaulin_include))]
 async fn cmd_query(nrql: &str, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;

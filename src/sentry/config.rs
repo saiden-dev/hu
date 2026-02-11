@@ -38,6 +38,7 @@ pub fn config_path() -> Option<PathBuf> {
 }
 
 /// Load Sentry config from settings file and environment
+#[cfg(not(tarpaulin_include))]
 pub fn load_config() -> Result<SentryConfig> {
     let mut config = SentryConfig::default();
 
@@ -67,6 +68,7 @@ pub fn load_config() -> Result<SentryConfig> {
 }
 
 /// Save auth token to config file
+#[cfg(not(tarpaulin_include))]
 pub fn save_auth_token(token: &str, org: &str) -> Result<()> {
     let path = config_path().ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
 

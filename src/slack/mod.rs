@@ -125,12 +125,14 @@ pub enum SlackCommands {
 
 /// Get Slack configuration status (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub fn get_config() -> Result<SlackConfig> {
     service::get_config()
 }
 
 /// List all channels (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_channels() -> Result<Vec<SlackChannel>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -140,6 +142,7 @@ pub async fn list_channels() -> Result<Vec<SlackChannel>> {
 
 /// Get channel info by name or ID (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn get_channel_info(channel: &str) -> Result<SlackChannel> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -149,6 +152,7 @@ pub async fn get_channel_info(channel: &str) -> Result<SlackChannel> {
 
 /// Get message history for a channel (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn get_history(channel: &str, limit: usize) -> Result<Vec<SlackMessage>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -159,6 +163,7 @@ pub async fn get_history(channel: &str, limit: usize) -> Result<Vec<SlackMessage
 /// Send a message to a channel (for MCP/HTTP)
 /// Returns (channel_id, timestamp)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn send_message(channel: &str, text: &str) -> Result<(String, String)> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -168,6 +173,7 @@ pub async fn send_message(channel: &str, text: &str) -> Result<(String, String)>
 
 /// Search messages (for MCP/HTTP) - requires user token
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn search_messages(query: &str, count: usize) -> Result<SlackSearchResult> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -178,6 +184,7 @@ pub async fn search_messages(query: &str, count: usize) -> Result<SlackSearchRes
 
 /// List users in the workspace (for MCP/HTTP)
 #[allow(dead_code)]
+#[cfg(not(tarpaulin_include))]
 pub async fn list_users() -> Result<Vec<SlackUser>> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;

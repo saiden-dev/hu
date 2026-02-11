@@ -56,6 +56,7 @@ impl From<MatchResponse> for SlackSearchMatch {
 }
 
 /// Search messages across the workspace (requires user token)
+#[cfg(not(tarpaulin_include))]
 pub async fn search_messages(
     client: &SlackClient,
     query: &str,

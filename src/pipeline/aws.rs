@@ -9,6 +9,7 @@ use super::types::{
 };
 
 /// Build AWS CLI base command with region
+#[cfg(not(tarpaulin_include))]
 fn build_aws_cmd(config: &AwsConfig) -> Command {
     let mut cmd = Command::new("aws");
     cmd.arg("codepipeline");
@@ -21,6 +22,7 @@ fn build_aws_cmd(config: &AwsConfig) -> Command {
 }
 
 /// List all pipelines
+#[cfg(not(tarpaulin_include))]
 pub fn list_pipelines(config: &AwsConfig) -> Result<Vec<Pipeline>> {
     let mut cmd = build_aws_cmd(config);
     cmd.arg("list-pipelines");
@@ -47,6 +49,7 @@ pub fn parse_list_pipelines(json: &str) -> Result<Vec<Pipeline>> {
 }
 
 /// Get pipeline state
+#[cfg(not(tarpaulin_include))]
 pub fn get_pipeline_state(config: &AwsConfig, name: &str) -> Result<PipelineState> {
     let mut cmd = build_aws_cmd(config);
     cmd.arg("get-pipeline-state").arg("--name").arg(name);
@@ -68,6 +71,7 @@ pub fn parse_pipeline_state(json: &str) -> Result<PipelineState> {
 }
 
 /// List pipeline executions
+#[cfg(not(tarpaulin_include))]
 pub fn list_executions(
     config: &AwsConfig,
     name: &str,

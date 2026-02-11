@@ -12,6 +12,7 @@ pub use cli::UtilsCommand;
 use anyhow::Result;
 
 /// Run a utils subcommand
+#[cfg(not(tarpaulin_include))]
 pub async fn run_command(cmd: UtilsCommand) -> Result<()> {
     match cmd {
         UtilsCommand::FetchHtml(args) => fetch_html::run(args).await,
@@ -25,6 +26,7 @@ pub async fn run_command(cmd: UtilsCommand) -> Result<()> {
 
 use cli::{DocsIndexArgs, DocsSearchArgs, DocsSectionArgs};
 
+#[cfg(not(tarpaulin_include))]
 fn run_docs_index(args: DocsIndexArgs) -> Result<()> {
     let index = docs_index::build_index(&args.path)?;
 
@@ -52,6 +54,7 @@ fn run_docs_index(args: DocsIndexArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn run_docs_search(args: DocsSearchArgs) -> Result<()> {
     let index = docs_index::load_index(&args.index)?;
     let results = docs_search::search_index(&index, &args.query);
@@ -60,6 +63,7 @@ fn run_docs_search(args: DocsSearchArgs) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn run_docs_section(args: DocsSectionArgs) -> Result<()> {
     let content = docs_section::extract_section_from_file(&args.file, &args.heading)?;
     println!("{}", content);

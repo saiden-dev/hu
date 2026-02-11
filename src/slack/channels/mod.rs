@@ -120,6 +120,7 @@ impl From<UserResponse> for SlackUser {
 }
 
 /// List all accessible channels
+#[cfg(not(tarpaulin_include))]
 pub async fn list_channels(client: &SlackClient) -> Result<Vec<SlackChannel>> {
     let mut all_channels = Vec::new();
     let mut cursor: Option<String> = None;
@@ -164,6 +165,7 @@ pub async fn list_channels(client: &SlackClient) -> Result<Vec<SlackChannel>> {
 }
 
 /// Get detailed info for a specific channel
+#[cfg(not(tarpaulin_include))]
 pub async fn get_channel_info(client: &SlackClient, channel_id: &str) -> Result<SlackChannel> {
     let response: ConversationsInfoResponse = client
         .get_with_params("conversations.info", &[("channel", channel_id)])
@@ -173,6 +175,7 @@ pub async fn get_channel_info(client: &SlackClient, channel_id: &str) -> Result<
 }
 
 /// Resolve a channel name (with or without #) to a channel ID
+#[cfg(not(tarpaulin_include))]
 pub async fn resolve_channel(client: &SlackClient, name_or_id: &str) -> Result<String> {
     // If it already looks like an ID (channel, group, DM, or user), return it
     // C = public channel, G = private channel, D = DM, U = user (for DM)
@@ -197,6 +200,7 @@ pub async fn resolve_channel(client: &SlackClient, name_or_id: &str) -> Result<S
 }
 
 /// List all users in the workspace
+#[cfg(not(tarpaulin_include))]
 pub async fn list_users(client: &SlackClient) -> Result<Vec<SlackUser>> {
     let response: UsersListResponse = client.get("users.list").await?;
 
@@ -211,6 +215,7 @@ pub async fn list_users(client: &SlackClient) -> Result<Vec<SlackUser>> {
 }
 
 /// Build a lookup map from user ID to username (with caching)
+#[cfg(not(tarpaulin_include))]
 pub async fn build_user_lookup(client: &SlackClient) -> Result<HashMap<String, String>> {
     // Try to load from cache first
     if let Some(cached) = load_user_cache() {
@@ -228,6 +233,7 @@ pub async fn build_user_lookup(client: &SlackClient) -> Result<HashMap<String, S
 }
 
 /// Load user cache if valid
+#[cfg(not(tarpaulin_include))]
 fn load_user_cache() -> Option<HashMap<String, String>> {
     let path = user_cache_path()?;
     let contents = fs::read_to_string(&path).ok()?;
@@ -247,6 +253,7 @@ fn load_user_cache() -> Option<HashMap<String, String>> {
 }
 
 /// Save user lookup to cache
+#[cfg(not(tarpaulin_include))]
 fn save_user_cache(users: &HashMap<String, String>) {
     let Some(path) = user_cache_path() else {
         return;

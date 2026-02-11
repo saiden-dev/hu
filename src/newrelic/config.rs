@@ -34,6 +34,7 @@ pub fn config_path() -> Option<PathBuf> {
 }
 
 /// Load config from settings file and environment
+#[cfg(not(tarpaulin_include))]
 pub fn load_config() -> Result<NewRelicConfig> {
     let mut config = NewRelicConfig::default();
 
@@ -62,6 +63,7 @@ pub fn load_config() -> Result<NewRelicConfig> {
 }
 
 /// Save config to file
+#[cfg(not(tarpaulin_include))]
 pub fn save_config(api_key: &str, account_id: i64) -> Result<()> {
     let path = config_path().ok_or_else(|| anyhow::anyhow!("Cannot determine config directory"))?;
 

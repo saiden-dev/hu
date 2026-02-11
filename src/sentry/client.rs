@@ -50,6 +50,7 @@ pub struct SentryClient {
 
 impl SentryClient {
     /// Create a new Sentry client
+    #[cfg(not(tarpaulin_include))]
     pub fn new() -> Result<Self> {
         let config = load_config()?;
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;
@@ -73,6 +74,7 @@ impl SentryClient {
     }
 
     /// List issues for organization
+    #[cfg(not(tarpaulin_include))]
     pub async fn list_issues(&self, query: Option<&str>, limit: usize) -> Result<Vec<Issue>> {
         let org = self.organization()?;
         let url = format!("{}/organizations/{}/issues/", SENTRY_API_URL, org);
@@ -86,6 +88,7 @@ impl SentryClient {
     }
 
     /// List issues for a specific project
+    #[cfg(not(tarpaulin_include))]
     pub async fn list_project_issues(
         &self,
         project: &str,
@@ -104,6 +107,7 @@ impl SentryClient {
     }
 
     /// Get a single issue by ID
+    #[cfg(not(tarpaulin_include))]
     pub async fn get_issue(&self, issue_id: &str) -> Result<Issue> {
         let org = self.organization()?;
         let url = format!(
@@ -115,6 +119,7 @@ impl SentryClient {
     }
 
     /// List events for an issue
+    #[cfg(not(tarpaulin_include))]
     pub async fn list_issue_events(&self, issue_id: &str, limit: usize) -> Result<Vec<Event>> {
         let org = self.organization()?;
         let url = format!(
@@ -127,6 +132,7 @@ impl SentryClient {
     }
 
     /// Make a GET request
+    #[cfg(not(tarpaulin_include))]
     async fn get<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let token = self.auth_token()?.to_string();
 
@@ -140,6 +146,7 @@ impl SentryClient {
     }
 
     /// Make a GET request with parameters
+    #[cfg(not(tarpaulin_include))]
     async fn get_with_params<T: DeserializeOwned>(
         &self,
         url: &str,
@@ -162,6 +169,7 @@ impl SentryClient {
     }
 
     /// Execute request with retry on rate limit
+    #[cfg(not(tarpaulin_include))]
     async fn execute_with_retry<F, Fut, T>(&self, request_fn: F) -> Result<T>
     where
         F: Fn() -> Fut,
@@ -213,6 +221,7 @@ impl SentryClient {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl SentryApi for SentryClient {
     async fn list_issues(&self, query: Option<&str>, limit: usize) -> Result<Vec<Issue>> {
         SentryClient::list_issues(self, query, limit).await

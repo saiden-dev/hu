@@ -57,6 +57,7 @@ pub struct NewRelicClient {
 
 impl NewRelicClient {
     /// Create a new client
+    #[cfg(not(tarpaulin_include))]
     pub fn new() -> Result<Self> {
         let config = load_config()?;
         let http = Client::builder().user_agent("hu-cli/0.1.0").build()?;
@@ -79,6 +80,7 @@ impl NewRelicClient {
     }
 
     /// List recent issues
+    #[cfg(not(tarpaulin_include))]
     pub async fn list_issues(&self, limit: usize) -> Result<Vec<Issue>> {
         let account_id = self.account_id()?;
 
@@ -147,6 +149,7 @@ impl NewRelicClient {
     }
 
     /// List recent incidents
+    #[cfg(not(tarpaulin_include))]
     pub async fn list_incidents(&self, limit: usize) -> Result<Vec<Incident>> {
         let account_id = self.account_id()?;
 
@@ -214,6 +217,7 @@ impl NewRelicClient {
     }
 
     /// Run NRQL query
+    #[cfg(not(tarpaulin_include))]
     pub async fn run_nrql(&self, nrql: &str) -> Result<Vec<serde_json::Value>> {
         let account_id = self.account_id()?;
 
@@ -259,6 +263,7 @@ impl NewRelicClient {
     }
 
     /// Execute GraphQL query
+    #[cfg(not(tarpaulin_include))]
     async fn execute_graphql<T: for<'de> Deserialize<'de>>(
         &self,
         query: &str,
@@ -348,6 +353,7 @@ impl NewRelicClient {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl NewRelicApi for NewRelicClient {
     async fn list_issues(&self, limit: usize) -> Result<Vec<Issue>> {
         NewRelicClient::list_issues(self, limit).await

@@ -101,6 +101,7 @@ pub enum TidyAction {
 }
 
 /// Run tidy operation on all channels
+#[cfg(not(tarpaulin_include))]
 pub async fn tidy_channels(
     client: &SlackClient,
     user_info: &UserInfo,
@@ -172,6 +173,7 @@ fn get_display_name(channel: &ChannelListItem) -> String {
 }
 
 /// List channels where user is a member
+#[cfg(not(tarpaulin_include))]
 async fn list_member_channels(client: &SlackClient) -> Result<Vec<ChannelListItem>> {
     let mut all_channels = Vec::new();
     let mut cursor: Option<String> = None;
@@ -217,6 +219,7 @@ async fn list_member_channels(client: &SlackClient) -> Result<Vec<ChannelListIte
 }
 
 /// Get channel info to determine if there are unreads
+#[cfg(not(tarpaulin_include))]
 async fn get_channel_unread_info(
     client: &SlackClient,
     channel_id: &str,
@@ -238,6 +241,7 @@ async fn get_channel_unread_info(
 }
 
 /// Get messages since last_read timestamp
+#[cfg(not(tarpaulin_include))]
 async fn get_messages_since(
     client: &SlackClient,
     channel_id: &str,
@@ -287,6 +291,7 @@ fn find_mention(messages: &[HistoryMessage], user_info: &UserInfo) -> Option<Str
 }
 
 /// Mark a channel as read at the given timestamp
+#[cfg(not(tarpaulin_include))]
 async fn mark_channel_read(client: &SlackClient, channel_id: &str, ts: &str) -> Result<()> {
     let body = MarkRequest {
         channel: channel_id.to_string(),

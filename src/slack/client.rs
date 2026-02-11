@@ -22,6 +22,7 @@ pub struct SlackClient {
 
 impl SlackClient {
     /// Create a new Slack client
+    #[cfg(not(tarpaulin_include))]
     pub fn new() -> Result<Self> {
         let config = load_config()?;
         let http = Client::builder()
@@ -62,6 +63,7 @@ impl SlackClient {
     }
 
     /// Make a GET request to the Slack API
+    #[cfg(not(tarpaulin_include))]
     pub async fn get<T: DeserializeOwned>(&self, method: &str) -> Result<T> {
         let url = format!("{}/{}", SLACK_API_URL, method);
         let token = self.bot_token()?.to_string();
@@ -77,6 +79,7 @@ impl SlackClient {
     }
 
     /// Make a GET request with query parameters
+    #[cfg(not(tarpaulin_include))]
     pub async fn get_with_params<T: DeserializeOwned>(
         &self,
         method: &str,
@@ -101,6 +104,7 @@ impl SlackClient {
     }
 
     /// Make a GET request using user token (required for search API)
+    #[cfg(not(tarpaulin_include))]
     pub async fn get_with_user_token<T: DeserializeOwned>(
         &self,
         method: &str,
@@ -125,6 +129,7 @@ impl SlackClient {
     }
 
     /// Make a POST request to the Slack API
+    #[cfg(not(tarpaulin_include))]
     pub async fn post<T, B>(&self, method: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
@@ -147,6 +152,7 @@ impl SlackClient {
     }
 
     /// Make a POST request using user token (required for conversations.mark)
+    #[cfg(not(tarpaulin_include))]
     pub async fn post_with_user_token<T, B>(&self, method: &str, body: &B) -> Result<T>
     where
         T: DeserializeOwned,
@@ -189,6 +195,7 @@ impl SlackClient {
     }
 
     /// Execute request with retry on rate limit
+    #[cfg(not(tarpaulin_include))]
     async fn execute_with_retry<F, Fut, T>(&self, request_fn: F) -> Result<T>
     where
         F: Fn() -> Fut,

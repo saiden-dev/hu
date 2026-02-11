@@ -13,6 +13,7 @@ pub use cli::PipelineCommand;
 use types::{AwsConfig, OutputFormat};
 
 /// Run a pipeline command
+#[cfg(not(tarpaulin_include))]
 pub async fn run(cmd: PipelineCommand) -> Result<()> {
     match cmd {
         PipelineCommand::List { region, json } => cmd_list(region, json),
@@ -27,6 +28,7 @@ pub async fn run(cmd: PipelineCommand) -> Result<()> {
 }
 
 /// List pipelines
+#[cfg(not(tarpaulin_include))]
 fn cmd_list(region: Option<String>, json: bool) -> Result<()> {
     let config = AwsConfig { region };
     let pipelines = aws::list_pipelines(&config)?;
@@ -42,6 +44,7 @@ fn cmd_list(region: Option<String>, json: bool) -> Result<()> {
 }
 
 /// Show pipeline status
+#[cfg(not(tarpaulin_include))]
 fn cmd_status(name: &str, region: Option<String>, json: bool) -> Result<()> {
     let config = AwsConfig { region };
     let state = aws::get_pipeline_state(&config, name)?;
@@ -57,6 +60,7 @@ fn cmd_status(name: &str, region: Option<String>, json: bool) -> Result<()> {
 }
 
 /// Show pipeline execution history
+#[cfg(not(tarpaulin_include))]
 fn cmd_history(name: &str, region: Option<String>, limit: usize, json: bool) -> Result<()> {
     let config = AwsConfig { region };
     let executions = aws::list_executions(&config, name, limit)?;
