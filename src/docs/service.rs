@@ -213,7 +213,7 @@ pub fn sync(path: Option<&Path>, no_push: bool, message: Option<&str>) -> Result
     let dir = path.map(PathBuf::from).unwrap_or_else(default_docs_dir);
 
     let options = SyncOptions {
-        pull: false,
+        no_pull: true, // docs sync doesn't need to pull
         trigger: false,
         no_commit: false,
         no_push,

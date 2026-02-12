@@ -47,8 +47,8 @@ pub struct SyncResult {
 /// Options for sync operation
 #[derive(Debug, Clone, Default)]
 pub struct SyncOptions {
-    /// Pull before push (two-way sync)
-    pub pull: bool,
+    /// Skip pulling from remote (pull is enabled by default)
+    pub no_pull: bool,
     /// Create empty commit and push to trigger CI
     pub trigger: bool,
     /// Skip git commit
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn sync_options_default() {
         let opts = SyncOptions::default();
-        assert!(!opts.pull);
+        assert!(!opts.no_pull);
         assert!(!opts.trigger);
         assert!(!opts.no_commit);
         assert!(!opts.no_push);
@@ -154,12 +154,12 @@ mod tests {
     }
 
     #[test]
-    fn sync_options_with_pull() {
+    fn sync_options_with_no_pull() {
         let opts = SyncOptions {
-            pull: true,
+            no_pull: true,
             ..Default::default()
         };
-        assert!(opts.pull);
+        assert!(opts.no_pull);
     }
 
     #[test]

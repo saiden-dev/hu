@@ -57,7 +57,7 @@ pub fn run(args: SyncArgs) -> Result<()> {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
     let options = SyncOptions {
-        pull: args.pull,
+        no_pull: args.no_pull,
         trigger: args.trigger,
         no_commit: args.no_commit,
         no_push: args.no_push,
@@ -80,10 +80,6 @@ pub fn run(args: SyncArgs) -> Result<()> {
         return Ok(());
     }
 
-    if result.pulled {
-        println!("\x1b[32m\u{2713}\x1b[0m Pulled from origin");
-    }
-
     // Trigger mode: empty commit
     if args.trigger {
         if let Some(hash) = &result.commit_hash {
@@ -96,11 +92,10 @@ pub fn run(args: SyncArgs) -> Result<()> {
         return Ok(());
     }
 
-    if result.files_committed == 0 && result.commit_hash.is_none() {
-        println!("Nothing to commit, working tree clean");
-        return Ok(());
-    }
+    // Output in order: commit → pull → push
+    let mut any_action = false;
 
+    // Show committed files
     if let Some(hash) = &result.commit_hash {
         let branch = result.branch.as_deref().unwrap_or("unknown");
         println!(
@@ -114,7 +109,8 @@ pub fn run(args: SyncArgs) -> Result<()> {
             branch,
             hash
         );
-    } else if args.no_commit {
+        any_action = true;
+    } else if args.no_commit && result.files_committed > 0 {
         println!(
             "\x1b[33m\u{25D0}\x1b[0m {} {} changed (--no-commit)",
             result.files_committed,
@@ -124,12 +120,24 @@ pub fn run(args: SyncArgs) -> Result<()> {
                 "files"
             }
         );
+        any_action = true;
     }
 
+    // Show pull
+    if result.pulled {
+        println!("\x1b[32m\u{2713}\x1b[0m Pulled from origin");
+        any_action = true;
+    }
+
+    // Show push
     if result.pushed {
         println!("\x1b[32m\u{2713}\x1b[0m Pushed to origin");
-    } else if !args.no_push && result.commit_hash.is_some() {
-        println!("\x1b[33m\u{25D0}\x1b[0m No remote configured, skipping push");
+        any_action = true;
+    }
+
+    // Nothing happened
+    if !any_action {
+        println!("Already up to date");
     }
 
     Ok(())
@@ -145,7 +153,7 @@ mod tests {
     fn sync_args_to_options() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
-            pull: true,
+            no_pull: true,
             trigger: false,
             no_commit: true,
             no_push: true,
@@ -156,7 +164,7 @@ mod tests {
         };
 
         let options = SyncOptions {
-            pull: args.pull,
+            no_pull: args.no_pull,
             trigger: args.trigger,
             no_commit: args.no_commit,
             no_push: args.no_push,
@@ -164,7 +172,7 @@ mod tests {
             path: args.path.clone(),
         };
 
-        assert!(options.pull);
+        assert!(options.no_pull);
         assert!(!options.trigger);
         assert!(options.no_commit);
         assert!(options.no_push);
@@ -176,7 +184,7 @@ mod tests {
     fn sync_args_trigger_mode() {
         let args = SyncArgs {
             path: None,
-            pull: false,
+            no_pull: false,
             trigger: true,
             no_commit: false,
             no_push: false,
@@ -187,7 +195,7 @@ mod tests {
         };
 
         let options = SyncOptions {
-            pull: args.pull,
+            no_pull: args.no_pull,
             trigger: args.trigger,
             no_commit: args.no_commit,
             no_push: args.no_push,
@@ -203,7 +211,7 @@ mod tests {
     fn run_not_git_repo() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
-            pull: false,
+            no_pull: false,
             trigger: false,
             no_commit: false,
             no_push: false,
@@ -220,7 +228,7 @@ mod tests {
     fn run_json_not_repo() {
         let args = SyncArgs {
             path: Some(PathBuf::from("/tmp")),
-            pull: false,
+            no_pull: false,
             trigger: false,
             no_commit: false,
             no_push: false,
@@ -326,7 +334,7 @@ mod tests {
     fn sync_args_with_log() {
         let args = SyncArgs {
             path: None,
-            pull: false,
+            no_pull: false,
             trigger: false,
             no_commit: false,
             no_push: false,

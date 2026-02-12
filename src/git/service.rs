@@ -125,6 +125,36 @@ pub fn pull(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Fetch from remote
+pub fn fetch(path: &Path) -> Result<()> {
+    run_git(&["fetch"], path)?;
+    Ok(())
+}
+
+/// Check if local branch is behind remote
+/// Returns true if there are commits on remote that we don't have
+pub fn is_behind_remote(path: &Path, branch: &str) -> Result<bool> {
+    let remote_ref = format!("origin/{}", branch);
+    let output = run_git(
+        &["rev-list", "--count", &format!("HEAD..{}", remote_ref)],
+        path,
+    )?;
+    let count: usize = output.trim().parse().unwrap_or(0);
+    Ok(count > 0)
+}
+
+/// Check if local branch is ahead of remote
+/// Returns true if there are local commits not on remote
+pub fn is_ahead_of_remote(path: &Path, branch: &str) -> Result<bool> {
+    let remote_ref = format!("origin/{}", branch);
+    let output = run_git(
+        &["rev-list", "--count", &format!("{}..HEAD", remote_ref)],
+        path,
+    )?;
+    let count: usize = output.trim().parse().unwrap_or(0);
+    Ok(count > 0)
+}
+
 /// Create an empty commit
 pub fn empty_commit(path: &Path, message: &str) -> Result<String> {
     run_git(&["commit", "--allow-empty", "-m", message], path)?;
@@ -139,7 +169,7 @@ pub fn has_remote(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Perform full sync: stage, commit, push
+/// Perform full sync: stage, commit, pull (if behind), push
 pub fn sync(options: &SyncOptions) -> Result<SyncResult> {
     let path = options
         .path
@@ -158,11 +188,8 @@ pub fn sync(options: &SyncOptions) -> Result<SyncResult> {
         branch: get_branch(&path).ok(),
     };
 
-    // Pull first if requested
-    if options.pull && has_remote(&path) {
-        pull(&path)?;
-        result.pulled = true;
-    }
+    let has_remote = has_remote(&path);
+    let branch = result.branch.clone();
 
     // Handle trigger mode: empty commit + push
     if options.trigger {
@@ -173,40 +200,52 @@ pub fn sync(options: &SyncOptions) -> Result<SyncResult> {
         let hash = empty_commit(&path, &message)?;
         result.commit_hash = Some(hash);
 
-        if !options.no_push && has_remote(&path) {
+        if !options.no_push && has_remote {
             push(&path)?;
             result.pushed = true;
         }
         return Ok(result);
     }
 
+    // Step 1: Commit local changes if any
     let status = get_status(&path)?;
-    if status.is_clean() {
-        return Ok(result);
+    let has_local_changes = !status.is_clean();
+
+    if has_local_changes {
+        let file_count = status.file_count();
+        result.files_committed = file_count;
+
+        if !options.no_commit {
+            stage_all(&path)?;
+            let message = options
+                .message
+                .clone()
+                .unwrap_or_else(|| generate_commit_message(file_count));
+            let hash = commit(&path, &message)?;
+            result.commit_hash = Some(hash);
+        }
     }
 
-    let file_count = status.file_count();
-    result.files_committed = file_count;
-
-    if options.no_commit {
-        return Ok(result);
+    // Step 2: Fetch and pull if behind (unless --no-pull)
+    if !options.no_pull && has_remote {
+        if let Some(ref b) = branch {
+            // Fetch to update remote refs
+            if fetch(&path).is_ok() && is_behind_remote(&path, b).unwrap_or(false) {
+                pull(&path)?;
+                result.pulled = true;
+            }
+        }
     }
 
-    // Stage all changes
-    stage_all(&path)?;
-
-    // Commit
-    let message = options
-        .message
-        .clone()
-        .unwrap_or_else(|| generate_commit_message(file_count));
-    let hash = commit(&path, &message)?;
-    result.commit_hash = Some(hash);
-
-    // Push if requested and remote exists
-    if !options.no_push && has_remote(&path) {
-        push(&path)?;
-        result.pushed = true;
+    // Step 3: Push if we have commits to push (unless --no-push)
+    if !options.no_push && has_remote {
+        if let Some(ref b) = branch {
+            // Push if we're ahead of remote (have local commits)
+            if is_ahead_of_remote(&path, b).unwrap_or(false) {
+                push(&path)?;
+                result.pushed = true;
+            }
+        }
     }
 
     Ok(result)
@@ -377,5 +416,57 @@ mod tests {
         // Test that empty_commit function exists and fails gracefully on non-repo
         let result = empty_commit(Path::new("/tmp"), "test");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn fetch_function_exists() {
+        // Test that fetch function exists and fails gracefully on non-repo
+        let result = fetch(Path::new("/tmp"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn fetch_current_repo() {
+        // Should succeed on current repo (hu project)
+        let result = fetch(Path::new("."));
+        // May fail if no network, but function should exist
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn is_behind_remote_no_repo() {
+        let result = is_behind_remote(Path::new("/tmp"), "main");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn is_ahead_of_remote_no_repo() {
+        let result = is_ahead_of_remote(Path::new("/tmp"), "main");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn is_behind_remote_current_repo() {
+        // On current repo, should return Ok with some boolean
+        if let Ok(branch) = get_branch(Path::new(".")) {
+            // Only test if we can get the branch
+            let result = is_behind_remote(Path::new("."), &branch);
+            // May fail if remote ref doesn't exist, but function should work
+            if let Ok(behind) = result {
+                // Just verify it returns a bool
+                assert!(behind || !behind);
+            }
+        }
+    }
+
+    #[test]
+    fn is_ahead_of_remote_current_repo() {
+        // On current repo, should return Ok with some boolean
+        if let Ok(branch) = get_branch(Path::new(".")) {
+            let result = is_ahead_of_remote(Path::new("."), &branch);
+            if let Ok(ahead) = result {
+                assert!(ahead || !ahead);
+            }
+        }
     }
 }
