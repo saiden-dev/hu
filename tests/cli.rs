@@ -246,15 +246,16 @@ fn gh_fix_help() {
 }
 
 #[test]
-fn gh_login_requires_token() {
+fn gh_login_help_shows_optional_token() {
     let output = hu()
-        .args(["gh", "login"])
+        .args(["gh", "login", "--help"])
         .output()
         .expect("failed to execute");
-    // Should fail because --token is required
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("--token") || stderr.contains("required"));
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Token is optional (uses gh CLI token if not provided)
+    assert!(stdout.contains("--token"));
+    assert!(stdout.contains("gh CLI") || stdout.contains("device flow"));
 }
 
 // Utils subcommand tests

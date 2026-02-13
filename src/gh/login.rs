@@ -5,7 +5,10 @@ use super::cli::LoginArgs;
 
 /// Handle the `hu gh login` command
 pub async fn run(args: LoginArgs) -> Result<()> {
-    let username = auth::login(&args.token).await?;
+    let username = match args.token {
+        Some(token) => auth::login(&token).await?,
+        None => auth::device_flow_login().await?,
+    };
     println!("{}", format_login_success(&username));
     Ok(())
 }
@@ -36,8 +39,14 @@ mod tests {
     #[test]
     fn login_args_has_token_field() {
         let args = LoginArgs {
-            token: "test_token".to_string(),
+            token: Some("test_token".to_string()),
         };
-        assert_eq!(args.token, "test_token");
+        assert_eq!(args.token, Some("test_token".to_string()));
+    }
+
+    #[test]
+    fn login_args_token_is_optional() {
+        let args = LoginArgs { token: None };
+        assert!(args.token.is_none());
     }
 }

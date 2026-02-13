@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::util::{load_credentials, save_credentials, GithubCredentials};
 
@@ -13,6 +13,39 @@ pub async fn login(token: &str) -> Result<String> {
     let username = fetch_username_from_github(token).await?;
     save_login(&username, token)?;
     Ok(username)
+}
+
+/// Start device flow authentication (uses `gh auth token` if available)
+pub async fn device_flow_login() -> Result<String> {
+    // Try to get token from gh CLI first
+    if let Some(token) = get_gh_cli_token().await {
+        println!("Using token from gh CLI...");
+        return login(&token).await;
+    }
+
+    // Fall back to prompting for PAT
+    bail!(
+        "No token found. Please either:\n  \
+         1. Run 'gh auth login' first, or\n  \
+         2. Use 'hu gh login --token <PAT>' with a Personal Access Token"
+    );
+}
+
+/// Try to get token from gh CLI
+async fn get_gh_cli_token() -> Option<String> {
+    let output = tokio::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .await
+        .ok()?;
+
+    if output.status.success() {
+        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !token.is_empty() {
+            return Some(token);
+        }
+    }
+    None
 }
 
 /// Save login credentials (extracted for testability)

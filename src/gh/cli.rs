@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Subcommand)]
 pub enum GhCommand {
-    /// Authenticate with GitHub using a Personal Access Token
+    /// Authenticate with GitHub (uses gh CLI token or PAT)
     Login(LoginArgs),
     /// List open pull requests authored by you
     Prs,
@@ -49,9 +49,9 @@ pub struct SyncArgs {
 
 #[derive(Debug, Args)]
 pub struct LoginArgs {
-    /// Personal Access Token (create at https://github.com/settings/tokens)
+    /// Personal Access Token (if not provided, uses device flow)
     #[arg(long, short)]
-    pub token: String,
+    pub token: Option<String>,
 }
 
 #[derive(Debug, Args)]
