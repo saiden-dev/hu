@@ -27,7 +27,6 @@ Commands for Claude Code session data analysis.
 | Command | Description |
 |---------|-------------|
 | `hu gh config` | Show GitHub configuration |
-| ~~`hu gh fix`~~ | ~~Analyze CI failures, output investigation context~~ ✅ |
 | `hu gh open <pr>` | Open PR in browser |
 | `hu gh stats` | Show workflow run duration statistics |
 
