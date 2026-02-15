@@ -827,6 +827,7 @@ dependencies = [
  "directories",
  "dirs",
  "hex",
+ "libc",
  "oauth2",
  "octocrab",
  "open",

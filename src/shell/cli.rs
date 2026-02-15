@@ -5,6 +5,8 @@ use std::path::PathBuf;
 pub enum ShellCommand {
     /// List directory contents with icons
     Ls(LsArgs),
+    /// Show disk filesystem usage
+    Df(DfArgs),
 }
 
 #[derive(Debug, Args)]
@@ -20,6 +22,13 @@ pub struct LsArgs {
     #[arg(short = 'l', long)]
     pub long: bool,
 
+    /// Output as JSON
+    #[arg(short, long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct DfArgs {
     /// Output as JSON
     #[arg(short, long)]
     pub json: bool,
@@ -46,6 +55,7 @@ mod tests {
                 assert!(!args.long);
                 assert!(!args.json);
             }
+            _ => panic!("Expected Ls command"),
         }
     }
 
@@ -56,6 +66,7 @@ mod tests {
             ShellCommand::Ls(args) => {
                 assert_eq!(args.path, Some(PathBuf::from("/tmp")));
             }
+            _ => panic!("Expected Ls command"),
         }
     }
 
@@ -66,6 +77,7 @@ mod tests {
             ShellCommand::Ls(args) => {
                 assert!(args.all);
             }
+            _ => panic!("Expected Ls command"),
         }
     }
 
@@ -76,6 +88,7 @@ mod tests {
             ShellCommand::Ls(args) => {
                 assert!(args.long);
             }
+            _ => panic!("Expected Ls command"),
         }
     }
 
@@ -88,6 +101,7 @@ mod tests {
                 assert!(args.long);
                 assert_eq!(args.path, Some(PathBuf::from("/home")));
             }
+            _ => panic!("Expected Ls command"),
         }
     }
 
@@ -98,6 +112,40 @@ mod tests {
             ShellCommand::Ls(args) => {
                 assert!(args.json);
             }
+            _ => panic!("Expected Ls command"),
+        }
+    }
+
+    #[test]
+    fn parse_df_default() {
+        let cli = TestCli::try_parse_from(["test", "df"]).unwrap();
+        match cli.cmd {
+            ShellCommand::Df(args) => {
+                assert!(!args.json);
+            }
+            _ => panic!("Expected Df command"),
+        }
+    }
+
+    #[test]
+    fn parse_df_json() {
+        let cli = TestCli::try_parse_from(["test", "df", "--json"]).unwrap();
+        match cli.cmd {
+            ShellCommand::Df(args) => {
+                assert!(args.json);
+            }
+            _ => panic!("Expected Df command"),
+        }
+    }
+
+    #[test]
+    fn parse_df_json_short() {
+        let cli = TestCli::try_parse_from(["test", "df", "-j"]).unwrap();
+        match cli.cmd {
+            ShellCommand::Df(args) => {
+                assert!(args.json);
+            }
+            _ => panic!("Expected Df command"),
         }
     }
 }
