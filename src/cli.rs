@@ -13,6 +13,7 @@ use crate::pagerduty::PagerDutyCommand;
 use crate::pipeline::PipelineCommand;
 use crate::read::ReadArgs;
 use crate::sentry::SentryCommand;
+use crate::shell::ShellCommand;
 use crate::slack::SlackCommands;
 use crate::utils::UtilsCommand;
 
@@ -114,5 +115,11 @@ pub enum Command {
     Cron {
         #[command(subcommand)]
         cmd: Option<CronCommand>,
+    },
+
+    /// Shell command wrappers (ls, etc.)
+    Shell {
+        #[command(subcommand)]
+        cmd: Option<ShellCommand>,
     },
 }

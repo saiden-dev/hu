@@ -1,0 +1,345 @@
+# File Type Color Configuration
+# Colors based on official logos/branding where applicable
+# Format: extension = "#RRGGBB" (hex color)
+
+[languages]
+# Rust - Copper/Orange
+rs = "#CE422B"
+rlib = "#CE422B"
+rmeta = "#CE422B"
+crate = "#CE422B"
+
+# Python - Blue (logo primary)
+py = "#3776AB"
+pyc = "#3776AB"
+pyi = "#3776AB"
+pyx = "#3776AB"
+pxd = "#3776AB"
+
+# Ruby - Red
+rb = "#CC342D"
+erb = "#CC342D"
+rbs = "#CC342D"
+rbi = "#CC342D"
+gemspec = "#CC342D"
+rake = "#CC342D"
+
+# JavaScript - Yellow
+js = "#F7DF1E"
+mjs = "#F7DF1E"
+cjs = "#F7DF1E"
+jsx = "#F7DF1E"
+
+# TypeScript - Blue
+ts = "#3178C6"
+mts = "#3178C6"
+cts = "#3178C6"
+tsx = "#3178C6"
+
+# Go - Cyan
+go = "#00ADD8"
+
+# Java - Orange
+java = "#ED8B00"
+jar = "#ED8B00"
+
+# Kotlin - Purple/Orange
+kt = "#7F52FF"
+kts = "#7F52FF"
+
+# Swift - Orange
+swift = "#FA7343"
+
+# Dart - Teal
+dart = "#0175C2"
+
+# Lua - Blue
+lua = "#000080"
+
+# C - Gray/Blue
+c = "#A8B9CC"
+h = "#A8B9CC"
+
+# C++ - Blue
+cpp = "#00599C"
+cc = "#00599C"
+cxx = "#00599C"
+hpp = "#00599C"
+
+# C# - Purple
+cs = "#512BD4"
+
+# PHP - Purple
+php = "#777BB4"
+
+# Perl - Navy
+pl = "#39457E"
+pm = "#39457E"
+
+# Haskell - Purple
+hs = "#5D4F85"
+lhs = "#5D4F85"
+
+# Elixir - Purple
+ex = "#6E4A7E"
+exs = "#6E4A7E"
+
+# Scala - Red
+scala = "#DC322F"
+
+# Clojure - Green
+clj = "#5881D8"
+cljs = "#5881D8"
+
+# R - Blue
+r = "#276DC3"
+
+# Julia - Purple/Green/Red
+jl = "#9558B2"
+
+# Shell - Green
+sh = "#4EAA25"
+bash = "#4EAA25"
+zsh = "#4EAA25"
+fish = "#4EAA25"
+
+# PowerShell - Blue
+ps1 = "#012456"
+
+# Fortran - Purple
+f90 = "#734F96"
+f95 = "#734F96"
+f = "#734F96"
+
+# CUDA - Green
+cu = "#76B900"
+cuh = "#76B900"
+
+# Assembly - Gray
+asm = "#6E4C13"
+s = "#6E4C13"
+
+# SQL - Orange
+sql = "#E38C00"
+
+# GraphQL - Pink
+graphql = "#E10098"
+gql = "#E10098"
+
+[web]
+# HTML - Orange
+html = "#E34F26"
+htm = "#E34F26"
+
+# CSS - Blue
+css = "#1572B6"
+scss = "#CF649A"
+sass = "#CF649A"
+less = "#1D365D"
+
+# Vue - Green
+vue = "#4FC08D"
+
+# Svelte - Orange
+svelte = "#FF3E00"
+
+# WebAssembly - Purple
+wasm = "#654FF0"
+wat = "#654FF0"
+
+[data]
+# JSON - Gray/Yellow
+json = "#CBCB41"
+jsonl = "#CBCB41"
+
+# YAML - Red
+yaml = "#CB171E"
+yml = "#CB171E"
+
+# TOML - Gray
+toml = "#9C4121"
+
+# XML - Orange
+xml = "#F80000"
+
+# CSV - Green
+csv = "#237346"
+
+# Protocol Buffers - Gray
+proto = "#4285F4"
+pb = "#4285F4"
+
+# MessagePack - Orange
+msgpack = "#FF6600"
+
+[docs]
+# Markdown - White/Light
+md = "#FFFFFF"
+markdown = "#FFFFFF"
+mdx = "#FFFFFF"
+
+# reStructuredText - Gray
+rst = "#141414"
+
+# Plain text - Gray
+txt = "#AAAAAA"
+
+# PDF - Red
+pdf = "#FF0000"
+
+# Word - Blue
+doc = "#2B579A"
+docx = "#2B579A"
+
+# Excel - Green
+xls = "#217346"
+xlsx = "#217346"
+
+[config]
+# Git - Orange/Red
+gitignore = "#F05032"
+gitattributes = "#F05032"
+gitmodules = "#F05032"
+
+# Editor configs - Gray
+editorconfig = "#FEFEFE"
+prettierrc = "#F7B93E"
+eslintrc = "#4B32C3"
+
+# Environment - Yellow
+env = "#ECD53F"
+
+# INI - Gray
+ini = "#6D8086"
+cfg = "#6D8086"
+conf = "#6D8086"
+
+# macOS plist - Gray
+plist = "#999999"
+
+[devops]
+# Docker - Blue
+dockerfile = "#2496ED"
+
+# Kubernetes - Blue
+yaml = "#326CE5"
+
+# Terraform - Purple
+tf = "#7B42BC"
+tfvars = "#7B42BC"
+
+# Ansible - Black/Red
+ansible = "#EE0000"
+
+# Nginx - Green
+nginx = "#009639"
+
+[images]
+# Generic image - Magenta
+png = "#FF69B4"
+jpg = "#FF69B4"
+jpeg = "#FF69B4"
+gif = "#FF69B4"
+webp = "#FF69B4"
+bmp = "#FF69B4"
+ico = "#FF69B4"
+heic = "#FF69B4"
+
+# SVG - Orange
+svg = "#FFB13B"
+
+[audio]
+# Audio - Purple
+mp3 = "#1DB954"
+wav = "#1DB954"
+flac = "#1DB954"
+ogg = "#1DB954"
+m4a = "#1DB954"
+
+[video]
+# Video - Red
+mp4 = "#FF0000"
+mkv = "#FF0000"
+avi = "#FF0000"
+mov = "#FF0000"
+webm = "#FF0000"
+
+[archives]
+# Archives - Brown/Tan
+zip = "#F9E2AF"
+tar = "#F9E2AF"
+gz = "#F9E2AF"
+tgz = "#F9E2AF"
+bz2 = "#F9E2AF"
+xz = "#F9E2AF"
+rar = "#F9E2AF"
+"7z" = "#F9E2AF"
+
+# Package formats
+deb = "#A80030"
+rpm = "#EE0000"
+
+[compiled]
+# Object files - Gray
+o = "#6D6D6D"
+a = "#6D6D6D"
+
+# Libraries - Blue-gray
+so = "#5C6BC0"
+dylib = "#5C6BC0"
+dll = "#5C6BC0"
+
+# Executables - Green
+exe = "#00FF00"
+bin = "#00FF00"
+
+[databases]
+# SQLite - Blue
+sqlite = "#003B57"
+sqlite3 = "#003B57"
+db = "#003B57"
+
+[ml]
+# ONNX - Gray
+onnx = "#808080"
+
+# PyTorch - Orange
+pt = "#EE4C2C"
+pth = "#EE4C2C"
+
+# TensorFlow - Orange
+pb = "#FF6F00"
+
+# Safetensors - Teal
+safetensors = "#00B4D8"
+
+[fonts]
+# Fonts - Gray
+ttf = "#CCCCCC"
+otf = "#CCCCCC"
+woff = "#CCCCCC"
+woff2 = "#CCCCCC"
+
+[certificates]
+# Certificates - Yellow/Gold
+pem = "#FFD700"
+crt = "#FFD700"
+cer = "#FFD700"
+key = "#FFD700"
+
+[lock]
+# Lock files - Gray (muted)
+lock = "#808080"
+
+[special]
+# Directories - Blue (bold)
+directory = "#5C9DFF"
+
+# Symlinks - Cyan
+symlink = "#00FFFF"
+
+# Executables - Green (bold)
+executable = "#00FF00"
+
+# Hidden files - Dimmed
+hidden = "#666666"

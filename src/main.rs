@@ -15,6 +15,7 @@ mod pagerduty;
 mod pipeline;
 mod read;
 mod sentry;
+mod shell;
 mod slack;
 mod util;
 mod utils;
@@ -123,6 +124,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Cron { cmd: None } => {
             print_subcommand_help("cron")?;
+        }
+        Command::Shell { cmd: Some(cmd) } => {
+            return shell::run_command(cmd);
+        }
+        Command::Shell { cmd: None } => {
+            print_subcommand_help("shell")?;
         }
     }
     Ok(())
