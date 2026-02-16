@@ -1,8 +1,8 @@
-name: test
+name: types
 
 on:
   workflow_run:
-    workflows: [types]
+    workflows: [format]
     types: [completed]
     branches: [master]
 
@@ -13,10 +13,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: test
+  types:
+    name: types
     runs-on: ubuntu-latest
-    environment: test
+    environment: types
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
@@ -27,5 +27,5 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Run tests
-        run: cargo test --all-targets
+      - name: Type check
+        run: cargo check --all-targets
