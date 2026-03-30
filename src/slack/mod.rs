@@ -38,6 +38,8 @@ mod types;
 use anyhow::Result;
 use clap::Subcommand;
 
+#[allow(unused_imports)]
+pub use client::SlackApi;
 use client::SlackClient;
 pub use config::SlackConfig;
 pub use handlers::run;

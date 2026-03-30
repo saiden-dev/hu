@@ -5,7 +5,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use super::client::SlackClient;
+use super::client::SlackApi;
 use super::types::{SlackSearchChannel, SlackSearchMatch, SlackSearchResult};
 
 /// Response from search.messages API
@@ -58,7 +58,7 @@ impl From<MatchResponse> for SlackSearchMatch {
 /// Search messages across the workspace (requires user token)
 #[cfg(not(tarpaulin_include))]
 pub async fn search_messages(
-    client: &SlackClient,
+    client: &impl SlackApi,
     query: &str,
     count: usize,
 ) -> Result<SlackSearchResult> {

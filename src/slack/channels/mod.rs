@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
 
-use super::client::SlackClient;
+use super::client::SlackApi;
 use super::config::config_path;
 use super::types::{SlackChannel, SlackUser};
 
@@ -121,7 +121,7 @@ impl From<UserResponse> for SlackUser {
 
 /// List all accessible channels
 #[cfg(not(tarpaulin_include))]
-pub async fn list_channels(client: &SlackClient) -> Result<Vec<SlackChannel>> {
+pub async fn list_channels(client: &impl SlackApi) -> Result<Vec<SlackChannel>> {
     let mut all_channels = Vec::new();
     let mut cursor: Option<String> = None;
     let mut first_request = true;
@@ -166,7 +166,7 @@ pub async fn list_channels(client: &SlackClient) -> Result<Vec<SlackChannel>> {
 
 /// Get detailed info for a specific channel
 #[cfg(not(tarpaulin_include))]
-pub async fn get_channel_info(client: &SlackClient, channel_id: &str) -> Result<SlackChannel> {
+pub async fn get_channel_info(client: &impl SlackApi, channel_id: &str) -> Result<SlackChannel> {
     let response: ConversationsInfoResponse = client
         .get_with_params("conversations.info", &[("channel", channel_id)])
         .await?;
@@ -176,7 +176,7 @@ pub async fn get_channel_info(client: &SlackClient, channel_id: &str) -> Result<
 
 /// Resolve a channel name (with or without #) to a channel ID
 #[cfg(not(tarpaulin_include))]
-pub async fn resolve_channel(client: &SlackClient, name_or_id: &str) -> Result<String> {
+pub async fn resolve_channel(client: &impl SlackApi, name_or_id: &str) -> Result<String> {
     // If it already looks like an ID (channel, group, DM, or user), return it
     // C = public channel, G = private channel, D = DM, U = user (for DM)
     if name_or_id.starts_with('C')
@@ -201,7 +201,7 @@ pub async fn resolve_channel(client: &SlackClient, name_or_id: &str) -> Result<S
 
 /// List all users in the workspace
 #[cfg(not(tarpaulin_include))]
-pub async fn list_users(client: &SlackClient) -> Result<Vec<SlackUser>> {
+pub async fn list_users(client: &impl SlackApi) -> Result<Vec<SlackUser>> {
     let response: UsersListResponse = client.get("users.list").await?;
 
     let users: Vec<SlackUser> = response
@@ -216,7 +216,7 @@ pub async fn list_users(client: &SlackClient) -> Result<Vec<SlackUser>> {
 
 /// Build a lookup map from user ID to username (with caching)
 #[cfg(not(tarpaulin_include))]
-pub async fn build_user_lookup(client: &SlackClient) -> Result<HashMap<String, String>> {
+pub async fn build_user_lookup(client: &impl SlackApi) -> Result<HashMap<String, String>> {
     // Try to load from cache first
     if let Some(cached) = load_user_cache() {
         return Ok(cached);

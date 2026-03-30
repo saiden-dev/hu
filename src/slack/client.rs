@@ -5,6 +5,8 @@
 use anyhow::Result;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -14,7 +16,45 @@ const SLACK_API_URL: &str = "https://slack.com/api";
 const MAX_RETRIES: u32 = 3;
 const DEFAULT_RETRY_SECS: u64 = 5;
 
-/// Slack API client
+/// Slack API trait for testability
+#[allow(dead_code)]
+pub trait SlackApi: Send + Sync {
+    /// Make a GET request to the Slack API
+    fn get<T: DeserializeOwned + Send>(
+        &self,
+        method: &str,
+    ) -> impl Future<Output = Result<T>> + Send;
+
+    /// Make a GET request with query parameters
+    fn get_with_params<T: DeserializeOwned + Send>(
+        &self,
+        method: &str,
+        params: &[(&str, &str)],
+    ) -> impl Future<Output = Result<T>> + Send;
+
+    /// Make a GET request using user token (required for search API)
+    fn get_with_user_token<T: DeserializeOwned + Send>(
+        &self,
+        method: &str,
+        params: &[(&str, &str)],
+    ) -> impl Future<Output = Result<T>> + Send;
+
+    /// Make a POST request to the Slack API
+    fn post<T: DeserializeOwned + Send, B: Serialize + Sync>(
+        &self,
+        method: &str,
+        body: &B,
+    ) -> impl Future<Output = Result<T>> + Send;
+
+    /// Make a POST request using user token
+    fn post_with_user_token<T: DeserializeOwned + Send, B: Serialize + Sync>(
+        &self,
+        method: &str,
+        body: &B,
+    ) -> impl Future<Output = Result<T>> + Send;
+}
+
+/// Slack HTTP client
 pub struct SlackClient {
     config: SlackConfig,
     http: Client,
@@ -60,118 +100,6 @@ impl SlackClient {
         self.config.oauth.user_token.as_deref().ok_or_else(|| {
             anyhow::anyhow!("user_token not configured (required for search)".to_string())
         })
-    }
-
-    /// Make a GET request to the Slack API
-    #[cfg(not(tarpaulin_include))]
-    pub async fn get<T: DeserializeOwned>(&self, method: &str) -> Result<T> {
-        let url = format!("{}/{}", SLACK_API_URL, method);
-        let token = self.bot_token()?.to_string();
-
-        self.execute_with_retry(|| {
-            self.http
-                .get(&url)
-                .header("Authorization", format!("Bearer {}", token))
-                .header("Accept", "application/json")
-                .send()
-        })
-        .await
-    }
-
-    /// Make a GET request with query parameters
-    #[cfg(not(tarpaulin_include))]
-    pub async fn get_with_params<T: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: &[(&str, &str)],
-    ) -> Result<T> {
-        let url = format!("{}/{}", SLACK_API_URL, method);
-        let token = self.bot_token()?.to_string();
-        let params: Vec<(String, String)> = params
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-
-        self.execute_with_retry(|| {
-            self.http
-                .get(&url)
-                .header("Authorization", format!("Bearer {}", token))
-                .header("Accept", "application/json")
-                .query(&params)
-                .send()
-        })
-        .await
-    }
-
-    /// Make a GET request using user token (required for search API)
-    #[cfg(not(tarpaulin_include))]
-    pub async fn get_with_user_token<T: DeserializeOwned>(
-        &self,
-        method: &str,
-        params: &[(&str, &str)],
-    ) -> Result<T> {
-        let url = format!("{}/{}", SLACK_API_URL, method);
-        let token = self.user_token()?.to_string();
-        let params: Vec<(String, String)> = params
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-
-        self.execute_with_retry(|| {
-            self.http
-                .get(&url)
-                .header("Authorization", format!("Bearer {}", token))
-                .header("Accept", "application/json")
-                .query(&params)
-                .send()
-        })
-        .await
-    }
-
-    /// Make a POST request to the Slack API
-    #[cfg(not(tarpaulin_include))]
-    pub async fn post<T, B>(&self, method: &str, body: &B) -> Result<T>
-    where
-        T: DeserializeOwned,
-        B: serde::Serialize + Sync,
-    {
-        let url = format!("{}/{}", SLACK_API_URL, method);
-        let token = self.bot_token()?.to_string();
-        let body_json = serde_json::to_string(body)?;
-
-        self.execute_with_retry(|| {
-            self.http
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", token))
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json; charset=utf-8")
-                .body(body_json.clone())
-                .send()
-        })
-        .await
-    }
-
-    /// Make a POST request using user token (required for conversations.mark)
-    #[cfg(not(tarpaulin_include))]
-    pub async fn post_with_user_token<T, B>(&self, method: &str, body: &B) -> Result<T>
-    where
-        T: DeserializeOwned,
-        B: serde::Serialize + Sync,
-    {
-        let url = format!("{}/{}", SLACK_API_URL, method);
-        let token = self.user_token()?.to_string();
-        let body_json = serde_json::to_string(body)?;
-
-        self.execute_with_retry(|| {
-            self.http
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", token))
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json; charset=utf-8")
-                .body(body_json.clone())
-                .send()
-        })
-        .await
     }
 
     /// Handle API response and check for Slack-specific errors
@@ -243,6 +171,111 @@ impl SlackClient {
             let text = response.text().await?;
             return self.parse_response(&text);
         }
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
+impl SlackApi for SlackClient {
+    async fn get<T: DeserializeOwned + Send>(&self, method: &str) -> Result<T> {
+        let url = format!("{}/{}", SLACK_API_URL, method);
+        let token = self.bot_token()?.to_string();
+
+        self.execute_with_retry(|| {
+            self.http
+                .get(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Accept", "application/json")
+                .send()
+        })
+        .await
+    }
+
+    async fn get_with_params<T: DeserializeOwned + Send>(
+        &self,
+        method: &str,
+        params: &[(&str, &str)],
+    ) -> Result<T> {
+        let url = format!("{}/{}", SLACK_API_URL, method);
+        let token = self.bot_token()?.to_string();
+        let params: Vec<(String, String)> = params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        self.execute_with_retry(|| {
+            self.http
+                .get(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Accept", "application/json")
+                .query(&params)
+                .send()
+        })
+        .await
+    }
+
+    async fn get_with_user_token<T: DeserializeOwned + Send>(
+        &self,
+        method: &str,
+        params: &[(&str, &str)],
+    ) -> Result<T> {
+        let url = format!("{}/{}", SLACK_API_URL, method);
+        let token = self.user_token()?.to_string();
+        let params: Vec<(String, String)> = params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        self.execute_with_retry(|| {
+            self.http
+                .get(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Accept", "application/json")
+                .query(&params)
+                .send()
+        })
+        .await
+    }
+
+    async fn post<T: DeserializeOwned + Send, B: Serialize + Sync>(
+        &self,
+        method: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}/{}", SLACK_API_URL, method);
+        let token = self.bot_token()?.to_string();
+        let body_json = serde_json::to_string(body)?;
+
+        self.execute_with_retry(|| {
+            self.http
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(body_json.clone())
+                .send()
+        })
+        .await
+    }
+
+    async fn post_with_user_token<T: DeserializeOwned + Send, B: Serialize + Sync>(
+        &self,
+        method: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = format!("{}/{}", SLACK_API_URL, method);
+        let token = self.user_token()?.to_string();
+        let body_json = serde_json::to_string(body)?;
+
+        self.execute_with_retry(|| {
+            self.http
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json; charset=utf-8")
+                .body(body_json.clone())
+                .send()
+        })
+        .await
     }
 }
 

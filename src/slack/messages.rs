@@ -5,7 +5,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use super::client::SlackClient;
+use super::client::SlackApi;
 use super::types::SlackMessage;
 
 /// Response from conversations.history API
@@ -50,7 +50,7 @@ impl From<MessageResponse> for SlackMessage {
 /// Get message history for a channel
 #[cfg(not(tarpaulin_include))]
 pub async fn get_history(
-    client: &SlackClient,
+    client: &impl SlackApi,
     channel_id: &str,
     limit: usize,
 ) -> Result<Vec<SlackMessage>> {
@@ -74,7 +74,7 @@ pub async fn get_history(
 /// Send a message to a channel
 #[cfg(not(tarpaulin_include))]
 pub async fn send_message(
-    client: &SlackClient,
+    client: &impl SlackApi,
     channel_id: &str,
     text: &str,
 ) -> Result<(String, String), anyhow::Error> {

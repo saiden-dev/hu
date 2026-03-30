@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time::sleep;
 
-use super::client::SlackClient;
+use super::client::SlackApi;
 
 #[cfg(test)]
 mod tests;
@@ -103,7 +103,7 @@ pub enum TidyAction {
 /// Run tidy operation on all channels
 #[cfg(not(tarpaulin_include))]
 pub async fn tidy_channels(
-    client: &SlackClient,
+    client: &impl SlackApi,
     user_info: &UserInfo,
     dry_run: bool,
 ) -> Result<Vec<TidyResult>> {
@@ -174,7 +174,7 @@ fn get_display_name(channel: &ChannelListItem) -> String {
 
 /// List channels where user is a member
 #[cfg(not(tarpaulin_include))]
-async fn list_member_channels(client: &SlackClient) -> Result<Vec<ChannelListItem>> {
+async fn list_member_channels(client: &impl SlackApi) -> Result<Vec<ChannelListItem>> {
     let mut all_channels = Vec::new();
     let mut cursor: Option<String> = None;
     let mut first = true;
@@ -221,7 +221,7 @@ async fn list_member_channels(client: &SlackClient) -> Result<Vec<ChannelListIte
 /// Get channel info to determine if there are unreads
 #[cfg(not(tarpaulin_include))]
 async fn get_channel_unread_info(
-    client: &SlackClient,
+    client: &impl SlackApi,
     channel_id: &str,
 ) -> Result<ChannelUnreadInfo> {
     let response: ConversationsInfoResponse = client
@@ -243,7 +243,7 @@ async fn get_channel_unread_info(
 /// Get messages since last_read timestamp
 #[cfg(not(tarpaulin_include))]
 async fn get_messages_since(
-    client: &SlackClient,
+    client: &impl SlackApi,
     channel_id: &str,
     oldest: &str,
 ) -> Result<Vec<HistoryMessage>> {
@@ -292,7 +292,7 @@ fn find_mention(messages: &[HistoryMessage], user_info: &UserInfo) -> Option<Str
 
 /// Mark a channel as read at the given timestamp
 #[cfg(not(tarpaulin_include))]
-async fn mark_channel_read(client: &SlackClient, channel_id: &str, ts: &str) -> Result<()> {
+async fn mark_channel_read(client: &impl SlackApi, channel_id: &str, ts: &str) -> Result<()> {
     let body = MarkRequest {
         channel: channel_id.to_string(),
         ts: ts.to_string(),
