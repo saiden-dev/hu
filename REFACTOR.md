@@ -1,24 +1,24 @@
 # Refactoring Plan: Interface-Agnostic Architecture
 
-Generated: 2026-02-08 | Last audited: 2026-03-26
+Generated: 2026-02-08 | Last audited: 2026-03-30
 Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 
 ## Summary
 
 **Goal**: Extract service layers so the same business logic powers CLI, MCP server, and HTTP API.
 
-**Current state**: 15+ modules. Significant progress on service extraction — most modules now have service.rs and thin CLI wrappers. Traits exist for 6 API clients. MCP server not yet started.
+**Current state**: 15+ modules. Critical path complete — MCP server is live with 7 tools. All high-priority service extractions done. Traits exist for 7 API clients.
 
 | Pattern | Count | Modules |
 |---------|-------|---------|
-| Has API trait | 6 | pagerduty, gh, jira, newrelic, sentry, web_search |
-| Has service.rs | 12 | pagerduty, sentry, newrelic, slack, jira, gh, read, git, docs, cron, shell/df, shell/ls |
-| Display separated | 9+ | Most modules |
-| Fully MCP-ready | 0 | None yet |
+| Has API trait | 7 | pagerduty, gh, jira, newrelic, sentry, slack, web_search |
+| Has service.rs | 14 | pagerduty, sentry, newrelic, slack, jira, gh, read, git, docs, data, cron, context, shell/df, shell/ls |
+| Display separated | 10+ | Most modules |
+| MCP server | 1 | `hu mcp serve` — 7 tools (data_stats, data_search, data_sessions, data_errors, data_pricing, data_tools, read_file) |
 
-**Progress**: 5 done, 4 partial, 10 not started out of 19 original items.
+**Progress**: 10 done, 2 partial, 7 not started out of 19 original items.
 
-**Note**: Public API functions across modules carry `#[allow(dead_code)]` — expected until H7 (MCP module) lands.
+**Note**: MCP module is live. `#[allow(dead_code)]` annotations on public API functions can now be removed as MCP handlers consume them.
 
 ---
 
@@ -31,15 +31,12 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 - Re-exports public API functions for MCP/HTTP use
 - Tests use `MockApi`
 
-### [ ] H2: Extract service layer from slack module _(partial)_
-- `src/slack/service.rs` exists (169 lines) with `list_channels`, `get_channel_info`, `get_history`, `send_message`, `search_messages`, `list_users`, `build_user_lookup`
-- **Blocker**: No `SlackApi` trait — service functions take concrete `&SlackClient`, not `&impl SlackApi`. Untestable with mocks.
-- `handlers.rs` still has 21 `println!` calls (277 lines). Auth, config display, tidy, send handlers not fully separated.
-- **Remaining work**:
-  1. Create `SlackApi` trait (see M3)
-  2. Update service functions to accept `&impl SlackApi`
-  3. Extract remaining handler logic (tidy, auth) into service
-  4. Move println! calls to display layer
+### [x] H2: Extract service layer from slack module _(done)_
+- `src/slack/service/mod.rs` — full service layer with `list_channels`, `get_channel_info`, `get_history`, `send_message`, `search_messages`, `list_users`, `build_user_lookup`, `authenticate`, `whoami`, `run_tidy`, `compute_tidy_summary`
+- All functions accept `&impl SlackApi` (M3 trait landed)
+- `handlers.rs` reduced from 277 to 191 lines, 0 `println!` calls — all output via display layer
+- New types: `AuthInfo`, `AuthResult`, `TidySummary` in `types.rs`
+- Service tests in `service/tests.rs`
 
 ### [x] H3: Extract service layer from newrelic module _(done)_
 - `src/newrelic/service.rs` (219 lines) — `list_issues`, `list_incidents`, `run_nrql`
@@ -53,20 +50,11 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 - `SentryApi` trait at `client.rs:18`
 - Tests use `MockApi`
 
-### [ ] H5: Extract service layer from data module
-- `src/data/mod.rs` is 474 lines — unchanged since plan was written
-- All `cmd_*` handlers remain inline, mixing DB access with output
-- `scan_debug_errors()` returns data (good pattern to follow)
-- **Action**:
-  1. Create `src/data/service.rs`:
-     ```rust
-     pub fn sync_data(store: &SqliteStore, claude_dir: &Path, force: bool) -> Result<SyncResult>
-     pub fn get_sessions(store: &SqliteStore, project: Option<&str>, limit: i64) -> Result<Vec<Session>>
-     pub fn get_stats(store: &SqliteStore, since: Option<i64>) -> Result<UsageStats>
-     pub fn search_messages(store: &SqliteStore, query: &str, limit: i64) -> Result<Vec<SearchResult>>
-     ```
-  2. Move `scan_debug_errors()` to service
-  3. Keep `open_db()` and `ensure_synced()` as helpers in mod.rs
+### [x] H5: Extract service layer from data module _(done)_
+- `src/data/service.rs` — `open_db`, `ensure_synced`, `sync_data`, `get_sessions`, `get_session_messages`, `get_current_session_messages`, `get_stats`, `get_todos`, `get_pending_todos`, `search_messages`, `get_tool_stats`, `get_tool_detail`, `scan_debug_errors`, `compute_pricing`, `get_branch_stats`, `fetch_pr_info`
+- `mod.rs` reduced from 474 to 194 lines — thin handlers only
+- `PricingData`, `ModelUsageWithCost`, `BranchWithPr`, `PrInfo`, `build_model_costs` moved to `types.rs`
+- Service tests cover `scan_debug_errors`, `compute_tidy_summary`, validation functions
 
 ### [x] H6: Fix read/service.rs - remove println! _(done)_
 - `read/service.rs` returns `ReadOutput` enum with variants `Full`, `Outline`, `Interface`, `Around`, `Diff`
@@ -74,43 +62,14 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 - `read/mod.rs` is a thin wrapper: `service::run()` -> `display::format()` -> `print!()`
 - Exposes `pub fn read(args) -> Result<ReadOutput>` for programmatic use
 
-### [ ] H7: Create MCP server module with templates
-- No `src/mcp/` directory exists yet
-- **Blocked by**: H2 (slack trait), H5 (data service)
-- **Unblocked by**: H1, H3, H4, H6 completions — pagerduty, newrelic, sentry, read are ready
-- **Action**:
-  1. Create module structure:
-     ```
-     src/mcp/
-       mod.rs         # JSON-RPC stdio server, method dispatch
-       cli.rs         # clap subcommands (serve, list)
-       types.rs       # MCP protocol types (Tool, Prompt, Resource, etc.)
-       templates.rs   # All definitions as constants (like install/templates.rs)
-       handlers.rs    # tools/call, prompts/get, resources/read handlers
-     ```
-  2. Define all three MCP primitives in templates.rs:
-     - **Tools**: `pagerduty_incidents`, `slack_search`, `sentry_issues`, etc.
-     - **Prompts**: `incident_response`, `daily_standup`, `error_analysis`
-     - **Resources**: `hu://config`, `hu://stats`, `hu://session/{id}`, `hu://jira/{key}`
-  3. Implement JSON-RPC handlers for:
-     - `tools/list`, `tools/call`
-     - `prompts/list`, `prompts/get`
-     - `resources/list`, `resources/read`, `resources/templates/list`
-  4. Add CLI subcommand:
-     ```rust
-     #[derive(Subcommand)]
-     pub enum McpCommand {
-         /// Start MCP server (JSON-RPC over stdio)
-         Serve,
-         /// List available tools, prompts, resources
-         List {
-             #[arg(long)] tools: bool,
-             #[arg(long)] prompts: bool,
-             #[arg(long)] resources: bool,
-         },
-     }
-     ```
-  5. Register: `claude mcp add hu --transport stdio -- hu mcp serve`
+### [x] H7: Create MCP server module _(done)_
+- `src/mcp/` — 6 files: `mod.rs`, `cli.rs`, `types.rs`, `tools.rs`, `handlers.rs`, `server.rs`
+- JSON-RPC 2.0 over stdio with `initialize`, `tools/list`, `tools/call` methods
+- 7 tools: `data_stats`, `data_search`, `data_sessions`, `data_errors`, `data_pricing`, `data_tools`, `read_file`
+- 72 tests covering types, tools, handlers, and server dispatch
+- CLI: `hu mcp serve` (start server), `hu mcp list` (show tools)
+- Register: `claude mcp add hu -- hu mcp serve`
+- **Future**: Add prompts, resources, and more tools (pagerduty, sentry, slack, jira) as needed
 
 ---
 
@@ -124,10 +83,11 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 - `pub trait SentryApi` at `src/sentry/client.rs:18`
 - Used in service.rs with `&impl SentryApi`
 
-### [ ] M3: Add trait to Slack client
-- `src/slack/client.rs` (347 lines) — no `SlackApi` trait
-- Service functions take concrete `&SlackClient` — blocks H2 completion and mock testing
-- **Action**: Extract `SlackApi` trait, consider splitting client into smaller files
+### [x] M3: Add trait to Slack client _(done)_
+- `pub trait SlackApi: Send + Sync` at `src/slack/client.rs:21`
+- 5 methods: `get`, `get_with_params`, `get_with_user_token`, `post`, `post_with_user_token`
+- Low-level HTTP trait (unlike other modules' domain-level traits) — business logic lives in channels/, messages/, search/ free functions
+- All consumers updated to `&impl SlackApi`
 
 ### [ ] M4: Flatten module exports _(partial)_
 - Types are re-exported in several modules: pagerduty, sentry, newrelic, slack, read, git
@@ -135,14 +95,10 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 - **Not started**: data, install, docs have minimal re-exports (just command enum)
 - **Remaining action**: Add `pub use client::{Client, XxxApi}` to each module's mod.rs
 
-### [ ] M5: Consolidate OutputFormat types
-- **7 separate definitions** found in: newrelic, pipeline, slack, data, sentry, pagerduty, eks
-- No shared `util/output.rs` or consolidated type
-- **Action**: Create `src/util/output.rs` with shared type:
-  ```rust
-  #[derive(Debug, Clone, Copy)]
-  pub enum OutputFormat { Json, Table }
-  ```
+### [x] M5: Consolidate OutputFormat types _(done)_
+- Single definition in `src/util/output.rs`: `#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]`
+- 7 modules updated to re-export via `pub use crate::util::OutputFormat`
+- All display/handler imports work unchanged through module-level re-exports
 
 ### [ ] M6: Extract install display logic
 - `src/install/mod.rs` is 369 lines with 25 `println!` calls (was 443 in original plan)
@@ -225,16 +181,16 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 
 ---
 
-## Implementation Order (updated)
+## Implementation Order (updated 2026-03-30)
 
-Remaining work, suggested sequence:
+Critical path complete (M3 → H2 → M5 → H5 → H7). Remaining work:
 
-1. **M3** (slack trait) — unblocks H2
-2. **H2** (slack service completion) — finish extracting handlers, use trait
-3. **M5** (OutputFormat) — quick win, reduces duplication
-4. **H5** (data service) — largest remaining extraction
-5. **H7** (MCP) — depends on H2, H5; pagerduty/newrelic/sentry/read already ready
-6. **M6** (install) — independent
+1. ~~**M3** (slack trait)~~ Done
+2. ~~**H2** (slack service)~~ Done
+3. ~~**M5** (OutputFormat)~~ Done
+4. ~~**H5** (data service)~~ Done
+5. ~~**H7** (MCP server)~~ Done
+6. **M6** (install) — independent, extract display/service
 7. **M4** (flatten exports) — finish re-exporting client/trait types
 8. **M7** (split large files) — gh client, slack client
 9. **M8** (handler naming) — standardize run vs run_command
@@ -250,12 +206,14 @@ Remaining work, suggested sequence:
 CLI args -> cmd_handlers (fetch + print) -> stdout
 ```
 
-### Current (in transition)
+### Current (MCP live, most modules done)
 ```
 CLI args -> cmd_handler -> service::*(api) -> display::*() -> print
                                 ^
-                                | (6 modules follow this pattern fully)
-                                | (slack partial, data not started)
+MCP req --> mcp::server --> service::*(api) -> json response
+                                |
+                                | (14 modules have service.rs)
+                                | (7 have API traits)
 ```
 
 ### After (target)

@@ -65,7 +65,45 @@ hu data        Claude Code session data (sync, stats, search)
 hu utils       Utility commands (fetch-html, grep, web-search)
 hu context     Session context tracking
 hu read        Smart file reading
+hu mcp         MCP server for Claude Code tool integration
 hu install     Install hooks and commands
+```
+
+## MCP Server
+
+hu includes a built-in [MCP](https://modelcontextprotocol.io) server that exposes CLI functionality as tools for Claude Code.
+
+### Setup
+
+```bash
+claude mcp add hu -- hu mcp serve
+```
+
+Or in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "hu": { "command": "hu", "args": ["mcp", "serve"] }
+  }
+}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `data_stats` | Claude Code usage statistics |
+| `data_search` | Search session messages |
+| `data_sessions` | List sessions |
+| `data_errors` | Scan debug log errors |
+| `data_pricing` | Token pricing analysis |
+| `data_tools` | Tool usage statistics |
+| `read_file` | Smart file reading (outline, interface, around) |
+
+```bash
+hu mcp list    # Show all available tools
+hu mcp serve   # Start JSON-RPC stdio server
 ```
 
 ## Configuration
