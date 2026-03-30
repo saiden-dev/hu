@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::util::OutputFormat;
 
+use super::pricing::{self, BillingCycle, BreakEvenAnalysis, ValueComparison};
+use super::queries::{ModelTokenUsage, PeriodUsage};
+
 // --- JSONL source types (read from Claude Code files) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,6 +190,69 @@ pub struct SyncResult {
     pub history: usize,
     pub messages: usize,
     pub todos: usize,
+}
+
+// --- Pricing / branch composite types ---
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelUsageWithCost {
+    pub model: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cost: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PricingData {
+    pub subscription: String,
+    pub subscription_price: f64,
+    pub billing_cycle: BillingCycle,
+    pub period_usage: PeriodUsage,
+    pub model_costs: Vec<ModelUsageWithCost>,
+    pub total_api_cost: f64,
+    pub projected_cost: f64,
+    pub break_even: BreakEvenAnalysis,
+    pub value_comparisons: Vec<ValueComparison>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BranchWithPr {
+    pub branch: BranchStats,
+    pub pr: Option<PrInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PrInfo {
+    pub number: i64,
+    pub title: String,
+    pub state: String,
+    pub url: String,
+}
+
+// --- Service helpers ---
+
+pub fn build_model_costs(model_usage: &[ModelTokenUsage]) -> Vec<ModelUsageWithCost> {
+    model_usage
+        .iter()
+        .map(|m| {
+            let cost = pricing::calculate_cost(Some(&m.model), m.input_tokens, m.output_tokens);
+            ModelUsageWithCost {
+                model: m.model.clone(),
+                input_tokens: m.input_tokens,
+                output_tokens: m.output_tokens,
+                cost,
+            }
+        })
+        .collect()
+}
+
+pub fn start_of_today_ms() -> i64 {
+    let now = chrono::Utc::now();
+    now.date_naive()
+        .and_hms_opt(0, 0, 0)
+        .expect("midnight is always valid")
+        .and_utc()
+        .timestamp_millis()
 }
 
 // --- Helpers ---
@@ -427,5 +493,97 @@ mod tests {
         assert_eq!(block.block_type.as_deref(), Some("tool_use"));
         assert_eq!(block.name.as_deref(), Some("Read"));
         assert_eq!(block.id.as_deref(), Some("tu-1"));
+    }
+
+    #[test]
+    fn start_of_today_is_past() {
+        let ms = start_of_today_ms();
+        let now = chrono::Utc::now().timestamp_millis();
+        assert!(ms <= now);
+        assert!(ms > now - 86_400_000); // Within last 24h
+    }
+
+    #[test]
+    fn build_model_costs_empty() {
+        let costs = build_model_costs(&[]);
+        assert!(costs.is_empty());
+    }
+
+    #[test]
+    fn build_model_costs_calculates() {
+        let usage = vec![ModelTokenUsage {
+            model: "claude-sonnet-4-5-20251101".to_string(),
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+        }];
+        let costs = build_model_costs(&usage);
+        assert_eq!(costs.len(), 1);
+        assert!((costs[0].cost - 18.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn pricing_data_serialize() {
+        let data = PricingData {
+            subscription: "max5x".to_string(),
+            subscription_price: 100.0,
+            billing_cycle: pricing::calculate_billing_cycle(1, 1700000000000),
+            period_usage: PeriodUsage::default(),
+            model_costs: vec![],
+            total_api_cost: 0.0,
+            projected_cost: 0.0,
+            break_even: pricing::calculate_break_even(100.0),
+            value_comparisons: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains("max5x"));
+    }
+
+    #[test]
+    fn branch_with_pr_serialize() {
+        let bwp = BranchWithPr {
+            branch: BranchStats::default(),
+            pr: Some(PrInfo {
+                number: 42,
+                title: "test".to_string(),
+                state: "OPEN".to_string(),
+                url: "https://example.com".to_string(),
+            }),
+        };
+        let json = serde_json::to_string(&bwp).unwrap();
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn branch_with_pr_no_pr() {
+        let bwp = BranchWithPr {
+            branch: BranchStats::default(),
+            pr: None,
+        };
+        let json = serde_json::to_string(&bwp).unwrap();
+        assert!(json.contains("null"));
+    }
+
+    #[test]
+    fn pr_info_fields() {
+        let pr = PrInfo {
+            number: 1,
+            title: "Fix".to_string(),
+            state: "MERGED".to_string(),
+            url: "https://gh.com".to_string(),
+        };
+        assert_eq!(pr.number, 1);
+        assert_eq!(pr.state, "MERGED");
+    }
+
+    #[test]
+    fn model_usage_with_cost_fields() {
+        let m = ModelUsageWithCost {
+            model: "claude-sonnet-4-5-20251101".to_string(),
+            input_tokens: 100,
+            output_tokens: 200,
+            cost: 0.005,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains("claude-sonnet"));
     }
 }

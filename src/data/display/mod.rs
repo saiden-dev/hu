@@ -2,9 +2,19 @@ use anyhow::Result;
 use comfy_table::presets::UTF8_FULL_CONDENSED;
 use comfy_table::{Cell, Color, Table};
 
-use super::pricing::{self, BillingCycle, ValueComparison};
-use super::queries::{ModelTokenUsage, PeriodUsage};
-use super::types::*;
+use super::pricing;
+use super::types::{
+    BranchWithPr, DebugError, Message, ModelUsage, OutputFormat, PricingData, SearchResult,
+    Session, SyncResult, Todo, TodoWithProject, ToolUsageDetail, ToolUsageStats, UsageStats,
+};
+
+// Re-export types needed by display tests for constructing composite test data
+#[cfg(test)]
+pub(crate) use super::pricing::ValueComparison;
+#[cfg(test)]
+pub(crate) use super::queries::{ModelTokenUsage, PeriodUsage};
+#[cfg(test)]
+pub(crate) use super::types::{build_model_costs, BranchStats, ModelUsageWithCost, PrInfo};
 
 #[cfg(test)]
 mod tests;
@@ -388,29 +398,6 @@ pub fn output_errors(errors: &[DebugError], format: &OutputFormat) -> Result<()>
     Ok(())
 }
 
-// Helper types for pricing display
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ModelUsageWithCost {
-    pub model: String,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub cost: f64,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PricingData {
-    pub subscription: String,
-    pub subscription_price: f64,
-    pub billing_cycle: BillingCycle,
-    pub period_usage: PeriodUsage,
-    pub model_costs: Vec<ModelUsageWithCost>,
-    pub total_api_cost: f64,
-    pub projected_cost: f64,
-    pub break_even: pricing::BreakEvenAnalysis,
-    pub value_comparisons: Vec<ValueComparison>,
-}
-
 pub fn output_pricing(data: &PricingData, format: &OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -509,20 +496,6 @@ pub fn output_pricing(data: &PricingData, format: &OutputFormat) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct BranchWithPr {
-    pub branch: BranchStats,
-    pub pr: Option<PrInfo>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PrInfo {
-    pub number: i64,
-    pub title: String,
-    pub state: String,
-    pub url: String,
-}
-
 pub fn output_branches(branches: &[BranchWithPr], format: &OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -562,19 +535,4 @@ pub fn output_branches(branches: &[BranchWithPr], format: &OutputFormat) -> Resu
         }
     }
     Ok(())
-}
-
-pub fn build_model_costs(model_usage: &[ModelTokenUsage]) -> Vec<ModelUsageWithCost> {
-    model_usage
-        .iter()
-        .map(|m| {
-            let cost = pricing::calculate_cost(Some(&m.model), m.input_tokens, m.output_tokens);
-            ModelUsageWithCost {
-                model: m.model.clone(),
-                input_tokens: m.input_tokens,
-                output_tokens: m.output_tokens,
-                cost,
-            }
-        })
-        .collect()
 }
