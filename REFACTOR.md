@@ -1,86 +1,62 @@
 # Refactoring Plan: Interface-Agnostic Architecture
 
-Generated: 2026-02-08 (updated from 2026-02-07)
+Generated: 2026-02-08 | Last audited: 2026-03-26
 Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 
 ## Summary
 
 **Goal**: Extract service layers so the same business logic powers CLI, MCP server, and HTTP API.
 
-**Current state**: 11 modules with varying levels of separation. Most have `println!()` in orchestration code, coupling output to business logic.
+**Current state**: 15+ modules. Significant progress on service extraction — most modules now have service.rs and thin CLI wrappers. Traits exist for 6 API clients. MCP server not yet started.
 
 | Pattern | Count | Modules |
 |---------|-------|---------|
-| Has API trait | 4 | pagerduty, gh, jira, web_search |
-| Has service.rs | 3 | read, git, docs |
-| Display separated | 9 | Most modules |
+| Has API trait | 6 | pagerduty, gh, jira, newrelic, sentry, web_search |
+| Has service.rs | 12 | pagerduty, sentry, newrelic, slack, jira, gh, read, git, docs, cron, shell/df, shell/ls |
+| Display separated | 9+ | Most modules |
 | Fully MCP-ready | 0 | None yet |
 
-**Issues found**: 19 total (7 high, 8 medium, 4 low)
+**Progress**: 5 done, 4 partial, 10 not started out of 19 original items.
+
+**Note**: Public API functions across modules carry `#[allow(dead_code)]` — expected until H7 (MCP module) lands.
 
 ---
 
 ## High Priority
 
-### [ ] H1: Extract service layer from pagerduty module
-- **Location**: `src/pagerduty/mod.rs:65-149`
-- **Problem**: `cmd_*` handlers create client, call API, format output, print - all in one
-- **Impact**: Cannot reuse for MCP/HTTP without duplicating logic
-- **Action**:
-  1. Create `src/pagerduty/service.rs` with functions that return data:
-     ```rust
-     pub async fn list_oncalls(api: &impl PagerDutyApi, opts: OncallOptions) -> Result<Vec<Oncall>>
-     pub async fn list_incidents(api: &impl PagerDutyApi, opts: IncidentOptions) -> Result<Vec<Incident>>
-     pub async fn get_incident(api: &impl PagerDutyApi, id: &str) -> Result<Incident>
-     ```
-  2. Move `check_configured()` to service layer
-  3. Keep `cmd_*` handlers as thin CLI wrappers that call service + display
+### [x] H1: Extract service layer from pagerduty module _(done)_
+- `src/pagerduty/service.rs` (314 lines) — `list_oncalls`, `list_incidents`, `list_alerts`, `get_incident`, `get_current_user`
+- All functions accept `&impl PagerDutyApi`
+- `mod.rs` has thin `cmd_*` handlers behind `#[cfg(not(tarpaulin_include))]`
+- Re-exports public API functions for MCP/HTTP use
+- Tests use `MockApi`
 
-### [ ] H2: Extract service layer from slack module
-- **Location**: `src/slack/handlers.rs` (334 lines, 21 println!)
-- **Problem**: Handlers mix business logic with output formatting
-- **Impact**: Slack integration locked to CLI only
-- **Action**:
-  1. Create `src/slack/service.rs`:
-     ```rust
-     pub async fn list_channels(client: &impl SlackApi) -> Result<Vec<Channel>>
-     pub async fn get_channel_info(client: &impl SlackApi, id: &str) -> Result<ChannelInfo>
-     pub async fn send_message(client: &impl SlackApi, channel: &str, text: &str) -> Result<MessageResult>
-     pub async fn tidy_channels(client: &impl SlackApi, user: &UserInfo, dry_run: bool) -> Result<TidyReport>
-     ```
-  2. Create `SlackApi` trait in `src/slack/client.rs`
-  3. Move `verify_token()` to client module
+### [ ] H2: Extract service layer from slack module _(partial)_
+- `src/slack/service.rs` exists (169 lines) with `list_channels`, `get_channel_info`, `get_history`, `send_message`, `search_messages`, `list_users`, `build_user_lookup`
+- **Blocker**: No `SlackApi` trait — service functions take concrete `&SlackClient`, not `&impl SlackApi`. Untestable with mocks.
+- `handlers.rs` still has 21 `println!` calls (277 lines). Auth, config display, tidy, send handlers not fully separated.
+- **Remaining work**:
+  1. Create `SlackApi` trait (see M3)
+  2. Update service functions to accept `&impl SlackApi`
+  3. Extract remaining handler logic (tidy, auth) into service
+  4. Move println! calls to display layer
 
-### [ ] H3: Extract service layer from newrelic module
-- **Location**: `src/newrelic/mod.rs:101-149`
-- **Problem**: Same pattern - handlers do everything inline
-- **Impact**: Cannot query NewRelic from MCP tools
-- **Action**:
-  1. Create `src/newrelic/service.rs`:
-     ```rust
-     pub async fn list_issues(client: &impl NewRelicApi, limit: usize) -> Result<Vec<Issue>>
-     pub async fn list_incidents(client: &impl NewRelicApi, limit: usize) -> Result<Vec<Incident>>
-     pub async fn run_nrql(client: &impl NewRelicApi, query: &str) -> Result<NrqlResults>
-     ```
-  2. Add `NewRelicApi` trait to client
+### [x] H3: Extract service layer from newrelic module _(done)_
+- `src/newrelic/service.rs` (219 lines) — `list_issues`, `list_incidents`, `run_nrql`
+- All functions accept `&impl NewRelicApi`
+- `NewRelicApi` trait at `client/mod.rs:19`
+- Tests use `MockApi`
 
-### [ ] H4: Extract service layer from sentry module
-- **Location**: `src/sentry/mod.rs:117-174`
-- **Problem**: Handlers inline all logic
-- **Impact**: Cannot use Sentry queries from MCP
-- **Action**:
-  1. Create `src/sentry/service.rs`:
-     ```rust
-     pub async fn list_issues(client: &impl SentryApi, opts: IssueOptions) -> Result<Vec<Issue>>
-     pub async fn get_issue(client: &impl SentryApi, id: &str) -> Result<Issue>
-     pub async fn list_events(client: &impl SentryApi, issue_id: &str, limit: usize) -> Result<Vec<Event>>
-     ```
-  2. Add `SentryApi` trait to client
+### [x] H4: Extract service layer from sentry module _(done)_
+- `src/sentry/service.rs` (386 lines) — `list_issues`, `get_issue`, `list_events`
+- All functions accept `&impl SentryApi`
+- `SentryApi` trait at `client.rs:18`
+- Tests use `MockApi`
 
 ### [ ] H5: Extract service layer from data module
-- **Location**: `src/data/mod.rs` (473 lines)
-- **Problem**: Large file with all handlers, mixes DB access with output
-- **Impact**: Cannot expose data queries via MCP
+- `src/data/mod.rs` is 474 lines — unchanged since plan was written
+- All `cmd_*` handlers remain inline, mixing DB access with output
+- `scan_debug_errors()` returns data (good pattern to follow)
 - **Action**:
   1. Create `src/data/service.rs`:
      ```rust
@@ -89,31 +65,19 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
      pub fn get_stats(store: &SqliteStore, since: Option<i64>) -> Result<UsageStats>
      pub fn search_messages(store: &SqliteStore, query: &str, limit: i64) -> Result<Vec<SearchResult>>
      ```
-  2. Move `scan_debug_errors()` to service (already returns data, good pattern)
+  2. Move `scan_debug_errors()` to service
   3. Keep `open_db()` and `ensure_synced()` as helpers in mod.rs
 
-### [ ] H6: Fix read/service.rs - remove println!
-- **Location**: `src/read/service.rs:23,37,42,45`
-- **Problem**: Service layer has 4 `println!()` calls - defeats the purpose
-- **Impact**: Cannot use read operations from MCP without stdout pollution
-- **Action**:
-  1. Change `run()` to return an enum:
-     ```rust
-     pub enum ReadOutput {
-         LinesAround { lines: Vec<Line>, center: usize, total: usize },
-         Diff(String),
-         Interface(Vec<OutlineItem>),
-         Outline(FileOutline),
-         Content(String),
-     }
-     pub fn run(args: ReadArgs) -> Result<ReadOutput>
-     ```
-  2. Move formatting to CLI layer in mod.rs
+### [x] H6: Fix read/service.rs - remove println! _(done)_
+- `read/service.rs` returns `ReadOutput` enum with variants `Full`, `Outline`, `Interface`, `Around`, `Diff`
+- No `println!` in service layer
+- `read/mod.rs` is a thin wrapper: `service::run()` -> `display::format()` -> `print!()`
+- Exposes `pub fn read(args) -> Result<ReadOutput>` for programmatic use
 
 ### [ ] H7: Create MCP server module with templates
-- **Location**: `src/mcp/` (new module)
-- **Problem**: No MCP interface exists yet
-- **Impact**: Cannot use hu tools from Claude Code or other MCP clients
+- No `src/mcp/` directory exists yet
+- **Blocked by**: H2 (slack trait), H5 (data service)
+- **Unblocked by**: H1, H3, H4, H6 completions — pagerduty, newrelic, sentry, read are ready
 - **Action**:
   1. Create module structure:
      ```
@@ -152,37 +116,28 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 
 ## Medium Priority
 
-### [ ] M1: Add trait to NewRelic client
-- **Location**: `src/newrelic/client/mod.rs`
-- **Problem**: No trait defined - cannot mock for testing or swap implementations
-- **Impact**: Tests require real API calls or `#[cfg(not(tarpaulin_include))]`
-- **Action**: Add `NewRelicApi` trait matching `PagerDutyApi` pattern
+### [x] M1: Add trait to NewRelic client _(done)_
+- `pub trait NewRelicApi` at `src/newrelic/client/mod.rs:19`
+- Used in service.rs with `&impl NewRelicApi`
 
-### [ ] M2: Add trait to Sentry client
-- **Location**: `src/sentry/client.rs`
-- **Problem**: No trait - same issue as NewRelic
-- **Action**: Add `SentryApi` trait
+### [x] M2: Add trait to Sentry client _(done)_
+- `pub trait SentryApi` at `src/sentry/client.rs:18`
+- Used in service.rs with `&impl SentryApi`
 
 ### [ ] M3: Add trait to Slack client
-- **Location**: `src/slack/client.rs` (389 lines)
-- **Problem**: Large file, no trait for mockability
+- `src/slack/client.rs` (347 lines) — no `SlackApi` trait
+- Service functions take concrete `&SlackClient` — blocks H2 completion and mock testing
 - **Action**: Extract `SlackApi` trait, consider splitting client into smaller files
 
-### [ ] M4: Flatten module exports
-- **Location**: All modules
-- **Problem**: Current: `pagerduty::types::Incident`, should be: `pagerduty::Incident`
-- **Impact**: Verbose imports, exposes internal structure
-- **Action**: Add `pub use` statements in each `mod.rs`:
-  ```rust
-  // pagerduty/mod.rs
-  pub use types::{Incident, Oncall, User, OutputFormat};
-  pub use client::{Client, Api};
-  ```
+### [ ] M4: Flatten module exports _(partial)_
+- Types are re-exported in several modules: pagerduty, sentry, newrelic, slack, read, git
+- **Not re-exported**: Client types and traits. External consumers still need `pagerduty::client::PagerDutyApi`
+- **Not started**: data, install, docs have minimal re-exports (just command enum)
+- **Remaining action**: Add `pub use client::{Client, XxxApi}` to each module's mod.rs
 
 ### [ ] M5: Consolidate OutputFormat types
-- **Location**: `src/*/types.rs` (each module defines own OutputFormat)
-- **Problem**: 6+ identical `OutputFormat { Json, Table }` definitions
-- **Impact**: Duplication, inconsistency risk
+- **7 separate definitions** found in: newrelic, pipeline, slack, data, sentry, pagerduty, eks
+- No shared `util/output.rs` or consolidated type
 - **Action**: Create `src/util/output.rs` with shared type:
   ```rust
   #[derive(Debug, Clone, Copy)]
@@ -190,9 +145,8 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
   ```
 
 ### [ ] M6: Extract install display logic
-- **Location**: `src/install/mod.rs` (25 println!, 443 lines)
-- **Problem**: Mixes installation logic with output, file too large
-- **Impact**: Cannot test installation logic without capturing stdout
+- `src/install/mod.rs` is 369 lines with 25 `println!` calls (was 443 in original plan)
+- No `display.rs` or `service.rs`
 - **Action**:
   1. Create `src/install/display.rs` for `print_status_table()` and output
   2. Create `src/install/service.rs` with:
@@ -202,35 +156,31 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
      ```
 
 ### [ ] M7: Split large client files
-- **Location**: `src/gh/client/mod.rs` (455 lines), `src/slack/client.rs` (389 lines)
-- **Problem**: Files exceed 300-500 line limit
-- **Impact**: Hard to navigate, test, maintain
+- `src/gh/client/mod.rs`: 417 lines (was 455 — slightly smaller but still over limit)
+- `src/slack/client.rs`: 347 lines (was 389 — slightly smaller but still large)
 - **Action**: Split by concern:
-  - `gh/client/` → `mod.rs`, `runs.rs`, `prs.rs`, `checks.rs`
-  - `slack/client/` → `mod.rs`, `channels.rs`, `messages.rs`, `search.rs`
+  - `gh/client/` -> `mod.rs`, `runs.rs`, `prs.rs`, `checks.rs`
+  - `slack/client/` -> `mod.rs`, `channels.rs`, `messages.rs`, `search.rs`
 
-### [ ] M8: Standardize handler naming
-- **Location**: Various modules
-- **Problem**: Inconsistent: `run()`, `run_command()`, `cmd_*()` patterns
-- **Impact**: Confusion when navigating codebase
-- **Action**: Standardize to:
-  - `run(cmd: Command)` - public dispatcher in mod.rs
-  - `service::*` - business logic functions
-  - Keep `cmd_*` as private CLI-specific handlers if needed
+### [ ] M8: Standardize handler naming _(partial)_
+- Two conventions in use:
+  - `run()`: pagerduty, sentry, newrelic, eks, pipeline, read
+  - `run_command()`: data, jira, gh, docs, utils, install, context, cron, shell
+- Within modules, private handlers consistently use `cmd_*` pattern
+- **Action**: Standardize to `run(cmd: Command)` everywhere
 
 ---
 
 ## Low Priority
 
 ### [ ] L1: Remove redundant type prefixes
-- **Location**: Various type definitions
-- **Problem**: `SentryConfig` in `sentry::config`, `SlackConfig` in `slack::config`
-- **Impact**: Verbose: `sentry::config::SentryConfig` vs `sentry::Config`
+- `SentryConfig` in `sentry::config`, `SlackConfig` in `slack::config`, etc.
 - **Action**: Rename to just `Config`, re-export at module level
 
-### [ ] L2: Consolidate check_configured patterns
-- **Location**: Each module has own `check_configured(&client)` function
-- **Problem**: Duplicated error handling pattern
+### [ ] L2: Consolidate check_configured patterns _(partial)_
+- Renamed to `ensure_configured` consistently across modules (pagerduty, sentry, newrelic, slack)
+- Each now lives in its module's `service.rs` (not duplicated in handlers)
+- **Remaining**: No shared `Configured` trait — each module implements its own version
 - **Action**: Consider trait method or shared helper:
   ```rust
   pub trait Configured {
@@ -239,8 +189,8 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
   ```
 
 ### [ ] L3: Extract common table formatting
-- **Location**: Multiple `display/mod.rs` files
-- **Problem**: Repeated `comfy_table` setup boilerplate
+- No `src/util/table.rs` or shared `new_table()` function
+- Each display module sets up `comfy_table` independently
 - **Action**: Create `src/util/table.rs`:
   ```rust
   pub fn new_table() -> Table {
@@ -251,8 +201,8 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
   ```
 
 ### [ ] L4: Document service layer pattern
-- **Location**: `CLAUDE.md` or new `ARCHITECTURE.md`
-- **Problem**: Pattern not documented for contributors
+- `CLAUDE.md` describes the high-level architecture but not the service layer contract
+- No `ARCHITECTURE.md` exists
 - **Action**: Add architecture section explaining:
   - Service layer returns data, never prints
   - Traits for all API clients
@@ -260,37 +210,61 @@ Scope: All modules - enabling reuse across CLI, MCP, and HTTP interfaces
 
 ---
 
-## Implementation Order
+## New Issues (discovered 2026-03-26)
 
-Suggested sequence for minimal disruption:
+### [ ] N1: Cover new modules in refactoring plan
+- Modules added since original plan: `cron`, `shell/df`, `shell/ls`, `context`, `pipeline`, `eks`
+- Some already have service.rs (cron, shell/df, shell/ls)
+- Others (pipeline, eks, context) may need service extraction
+- **Action**: Audit each for service/trait/display separation
 
-1. **H6** (read) - Small, isolated, proves the service pattern
-2. **H1** (pagerduty) - Already has trait, closest to done
-3. **M5** (OutputFormat) - Unblocks other refactors
-4. **H3, H4** (newrelic, sentry) - Similar to pagerduty
-5. **M1, M2** (traits) - Enable testing
-6. **H7** (mcp) - Create MCP module with tool templates (depends on service layers)
-7. **H2** (slack) - Larger but well-structured
-8. **H5** (data) - Largest, most complex
-9. **M6** (install) - Independent
-10. **Medium/Low** - As time permits
+### [ ] N2: gh and jira services completed but undocumented
+- `src/gh/service.rs` and `src/jira/service.rs` exist with trait-based APIs
+- Both follow the correct pattern but were not in the original plan
+- **Status**: Done — no action needed, noted for completeness
+
+---
+
+## Implementation Order (updated)
+
+Remaining work, suggested sequence:
+
+1. **M3** (slack trait) — unblocks H2
+2. **H2** (slack service completion) — finish extracting handlers, use trait
+3. **M5** (OutputFormat) — quick win, reduces duplication
+4. **H5** (data service) — largest remaining extraction
+5. **H7** (MCP) — depends on H2, H5; pagerduty/newrelic/sentry/read already ready
+6. **M6** (install) — independent
+7. **M4** (flatten exports) — finish re-exporting client/trait types
+8. **M7** (split large files) — gh client, slack client
+9. **M8** (handler naming) — standardize run vs run_command
+10. **N1** (new modules) — audit pipeline, eks, context
+11. **Low priority** — as time permits
 
 ---
 
 ## Target Architecture
 
-### Before (current)
+### Before (original state)
 ```
-CLI args → cmd_handlers (fetch + print) → stdout
+CLI args -> cmd_handlers (fetch + print) -> stdout
 ```
 
-### After
+### Current (in transition)
 ```
-CLI args ──┐
-           ├──→ service.rs (returns data) ──→ client (API calls)
-MCP req ───┤         │
-           │         ↓
-HTTP req ──┘    display (formatting) ← only CLI uses this
+CLI args -> cmd_handler -> service::*(api) -> display::*() -> print
+                                ^
+                                | (6 modules follow this pattern fully)
+                                | (slack partial, data not started)
+```
+
+### After (target)
+```
+CLI args ---+
+            +---> service.rs (returns data) ---> client (API calls)
+MCP req ----+         |
+            |         v
+HTTP req ---+    display (formatting) <- only CLI uses this
 ```
 
 ### Module Structure Template
@@ -621,22 +595,22 @@ Or in `.mcp.json` for project sharing:
 ```
 # CLI
 hu pagerduty incidents --limit 5
-  → cli::parse() → pagerduty::cmd_incidents()
-    → service::list_incidents(api, limit)
-      → display::output_incidents(data, Table)
-        → println!(table)
+  -> cli::parse() -> pagerduty::cmd_incidents()
+    -> service::list_incidents(api, limit)
+      -> display::output_incidents(data, Table)
+        -> println!(table)
 
 # MCP
 {"method": "pagerduty/incidents", "params": {"limit": 5}}
-  → mcp::handle() → mcp::tools::pagerduty_incidents()
-    → service::list_incidents(api, limit)
-      → json_rpc_response(data)
+  -> mcp::handle() -> mcp::tools::pagerduty_incidents()
+    -> service::list_incidents(api, limit)
+      -> json_rpc_response(data)
 
 # HTTP
 GET /api/pagerduty/incidents?limit=5
-  → serve::routes::get_incidents()
-    → service::list_incidents(api, limit)
-      → Json(data)
+  -> serve::routes::get_incidents()
+    -> service::list_incidents(api, limit)
+      -> Json(data)
 ```
 
 ---
