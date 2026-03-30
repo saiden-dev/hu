@@ -47,9 +47,9 @@ pub fn get_disk_usage(device: &str, mount_point: &str, fs_type: &str) -> Result<
         // Cast needed for cross-platform compatibility (types differ between macOS and Linux)
         #[allow(clippy::unnecessary_cast)]
         let block_size = stat.f_frsize as u64;
-        let total = stat.f_blocks as u64 * block_size;
-        let free = stat.f_bfree as u64 * block_size;
-        let available = stat.f_bavail as u64 * block_size;
+        let total = stat.f_blocks * block_size;
+        let free = stat.f_bfree * block_size;
+        let available = stat.f_bavail * block_size;
         let used = total.saturating_sub(free);
 
         let use_percent = if total > 0 {
