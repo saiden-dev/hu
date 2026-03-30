@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 // --- JSONL source types (read from Claude Code files) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,13 +189,6 @@ pub struct SyncResult {
     pub todos: usize,
 }
 
-#[derive(Debug, Clone, Default)]
-pub enum OutputFormat {
-    #[default]
-    Table,
-    Json,
-}
-
 // --- Helpers ---
 
 impl MessageContent {
@@ -355,12 +350,6 @@ mod tests {
         assert_eq!(r.history, 0);
         assert_eq!(r.messages, 0);
         assert_eq!(r.todos, 0);
-    }
-
-    #[test]
-    fn output_format_default() {
-        let f = OutputFormat::default();
-        assert!(matches!(f, OutputFormat::Table));
     }
 
     #[test]

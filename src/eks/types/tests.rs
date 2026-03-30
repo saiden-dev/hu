@@ -38,12 +38,6 @@ fn kubectl_config_default() {
 }
 
 #[test]
-fn output_format_default() {
-    let format = OutputFormat::default();
-    assert_eq!(format, OutputFormat::Table);
-}
-
-#[test]
 fn parse_pod_list() {
     let json = r#"{
             "items": [
@@ -227,27 +221,6 @@ fn pod_deserialize_no_node() {
         }"#;
     let pod: Pod = serde_json::from_str(json).unwrap();
     assert!(pod.node.is_none());
-}
-
-#[test]
-fn output_format_debug() {
-    let format = OutputFormat::Json;
-    let debug = format!("{:?}", format);
-    assert!(debug.contains("Json"));
-}
-
-#[test]
-fn output_format_clone() {
-    let format = OutputFormat::Table;
-    let cloned = format;
-    assert_eq!(cloned, OutputFormat::Table);
-}
-
-#[test]
-fn output_format_eq() {
-    assert_eq!(OutputFormat::Table, OutputFormat::Table);
-    assert_eq!(OutputFormat::Json, OutputFormat::Json);
-    assert_ne!(OutputFormat::Table, OutputFormat::Json);
 }
 
 #[test]

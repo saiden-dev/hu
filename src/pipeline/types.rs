@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 /// Pipeline summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pipeline {
@@ -123,16 +125,6 @@ impl StageStatus {
     }
 }
 
-/// Output format
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum OutputFormat {
-    /// Table format
-    #[default]
-    Table,
-    /// JSON format
-    Json,
-}
-
 /// AWS CLI configuration
 #[derive(Debug, Clone, Default)]
 pub struct AwsConfig {
@@ -210,12 +202,6 @@ mod tests {
         assert_eq!(StageStatus::from_str("Failed"), StageStatus::Failed);
         assert_eq!(StageStatus::from_str("Stopped"), StageStatus::Stopped);
         assert_eq!(StageStatus::from_str("Other"), StageStatus::Unknown);
-    }
-
-    #[test]
-    fn output_format_default() {
-        let format = OutputFormat::default();
-        assert_eq!(format, OutputFormat::Table);
     }
 
     #[test]

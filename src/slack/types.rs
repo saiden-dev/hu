@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 /// Slack channel information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackChannel {
@@ -98,16 +100,6 @@ pub struct SlackSearchResult {
     pub matches: Vec<SlackSearchMatch>,
 }
 
-/// Output format for Slack commands
-#[derive(Debug, Clone, Copy, Default)]
-pub enum OutputFormat {
-    /// Human-readable table format
-    #[default]
-    Table,
-    /// JSON format for scripting
-    Json,
-}
-
 /// Authenticated user info returned from auth.test
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
@@ -146,26 +138,6 @@ pub struct TidySummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_output_format_default() {
-        let format = OutputFormat::default();
-        assert!(matches!(format, OutputFormat::Table));
-    }
-
-    #[test]
-    fn test_output_format_clone() {
-        let format = OutputFormat::Json;
-        let cloned = format.clone();
-        assert!(matches!(cloned, OutputFormat::Json));
-    }
-
-    #[test]
-    fn test_output_format_debug() {
-        let format = OutputFormat::Table;
-        let debug = format!("{:?}", format);
-        assert_eq!(debug, "Table");
-    }
 
     #[test]
     fn test_slack_channel_debug() {

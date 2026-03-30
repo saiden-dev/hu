@@ -182,19 +182,6 @@ fn current_user_response_deserialize() {
 }
 
 #[test]
-fn output_format_default() {
-    let format = OutputFormat::default();
-    assert_eq!(format, OutputFormat::Table);
-}
-
-#[test]
-fn output_format_eq() {
-    assert_eq!(OutputFormat::Table, OutputFormat::Table);
-    assert_eq!(OutputFormat::Json, OutputFormat::Json);
-    assert_ne!(OutputFormat::Table, OutputFormat::Json);
-}
-
-#[test]
 fn types_are_debug() {
     // Ensure all types implement Debug
     let user = User {

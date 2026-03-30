@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 #[cfg(test)]
 mod tests;
 
@@ -157,16 +159,6 @@ pub struct Incident {
     /// Users assigned to this incident
     #[serde(default)]
     pub assignments: Vec<Assignment>,
-}
-
-/// Output format
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum OutputFormat {
-    /// Table format
-    #[default]
-    Table,
-    /// JSON format
-    Json,
 }
 
 /// API response wrapper for oncalls

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 /// Sentry issue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,14 +120,6 @@ pub struct EventTag {
     pub key: String,
     /// Tag value
     pub value: String,
-}
-
-/// Output format
-#[derive(Debug, Clone, Copy, Default)]
-pub enum OutputFormat {
-    #[default]
-    Table,
-    Json,
 }
 
 #[cfg(test)]
@@ -281,26 +275,6 @@ mod tests {
         };
         let debug = format!("{:?}", tag);
         assert!(debug.contains("EventTag"));
-    }
-
-    #[test]
-    fn test_output_format_default() {
-        let format = OutputFormat::default();
-        assert!(matches!(format, OutputFormat::Table));
-    }
-
-    #[test]
-    fn test_output_format_clone() {
-        let format = OutputFormat::Json;
-        let cloned = format.clone();
-        assert!(matches!(cloned, OutputFormat::Json));
-    }
-
-    #[test]
-    fn test_output_format_debug() {
-        let format = OutputFormat::Table;
-        let debug = format!("{:?}", format);
-        assert_eq!(debug, "Table");
     }
 
     #[test]

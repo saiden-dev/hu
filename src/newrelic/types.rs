@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::util::OutputFormat;
+
 /// New Relic incident
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,14 +51,6 @@ pub struct Issue {
     pub closed_at: Option<i64>,
     /// Activated at
     pub activated_at: Option<i64>,
-}
-
-/// Output format
-#[derive(Debug, Clone, Copy, Default)]
-pub enum OutputFormat {
-    #[default]
-    Table,
-    Json,
 }
 
 #[cfg(test)]
@@ -127,26 +121,6 @@ mod tests {
         let cloned = issue.clone();
         assert_eq!(cloned.issue_id, issue.issue_id);
         assert_eq!(cloned.title, issue.title);
-    }
-
-    #[test]
-    fn test_output_format_default() {
-        let format = OutputFormat::default();
-        assert!(matches!(format, OutputFormat::Table));
-    }
-
-    #[test]
-    fn test_output_format_clone() {
-        let format = OutputFormat::Json;
-        let cloned = format.clone();
-        assert!(matches!(cloned, OutputFormat::Json));
-    }
-
-    #[test]
-    fn test_output_format_debug() {
-        let format = OutputFormat::Table;
-        let debug = format!("{:?}", format);
-        assert_eq!(debug, "Table");
     }
 
     #[test]
@@ -262,13 +236,6 @@ mod tests {
         let json = r#"{"issueId":"ISS","title":[]}"#;
         let issue: Issue = serde_json::from_str(json).unwrap();
         assert!(issue.title.is_empty());
-    }
-
-    #[test]
-    fn test_output_format_copy() {
-        let format = OutputFormat::Json;
-        let copied = format;
-        assert!(matches!(copied, OutputFormat::Json));
     }
 
     #[test]
