@@ -10,6 +10,7 @@ mod gh;
 mod git;
 mod install;
 mod jira;
+mod mcp;
 mod newrelic;
 mod pagerduty;
 mod pipeline;
@@ -130,6 +131,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Shell { cmd: None } => {
             print_subcommand_help("shell")?;
+        }
+        Command::Mcp { cmd: Some(cmd) } => {
+            return mcp::run_command(cmd).await;
+        }
+        Command::Mcp { cmd: None } => {
+            print_subcommand_help("mcp")?;
         }
     }
     Ok(())

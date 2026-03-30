@@ -8,6 +8,7 @@ use crate::eks::EksCommand;
 use crate::gh::GhCommand;
 use crate::install::InstallCommand;
 use crate::jira::JiraCommand;
+use crate::mcp::McpCommand;
 use crate::newrelic::NewRelicCommand;
 use crate::pagerduty::PagerDutyCommand;
 use crate::pipeline::PipelineCommand;
@@ -121,5 +122,11 @@ pub enum Command {
     Shell {
         #[command(subcommand)]
         cmd: Option<ShellCommand>,
+    },
+
+    /// MCP server for Claude Code integration
+    Mcp {
+        #[command(subcommand)]
+        cmd: Option<McpCommand>,
     },
 }
