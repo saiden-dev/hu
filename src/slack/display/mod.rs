@@ -1,14 +1,29 @@
 //! Slack output formatting
 
+use std::collections::HashMap;
+use std::path::Path;
+
 use anyhow::{Context, Result};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Cell, Color, ContentArrangement, Table};
 use regex::Regex;
-use std::collections::HashMap;
 
-use super::types::{OutputFormat, SlackChannel, SlackMessage, SlackSearchResult, SlackUser};
+use super::tidy;
+use super::types::{
+    AuthInfo, AuthResult, OutputFormat, SlackChannel, SlackMessage, SlackSearchResult, SlackUser,
+    TidySummary,
+};
 
 #[cfg(test)]
 mod tests;
+
+/// Create a table with standard formatting
+fn new_table(headers: Vec<&str>) -> Table {
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL_CONDENSED);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(headers);
+    table
+}
 
 /// Truncate string to max length with ellipsis
 fn truncate(s: &str, max_len: usize) -> String {
@@ -117,31 +132,22 @@ pub fn output_channels(channels: &[SlackChannel], format: OutputFormat) -> Resul
                 println!("No channels found.");
                 return Ok(());
             }
-
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_content_arrangement(ContentArrangement::Dynamic);
-            table.set_header(vec!["Name", "Type", "Members", "Topic"]);
-
+            let mut table = new_table(vec!["Name", "Type", "Members", "Topic"]);
             for channel in channels {
-                let channel_type = if channel.is_private {
+                let kind = if channel.is_private {
                     "private"
                 } else {
                     "public"
                 };
-                let members = channel
-                    .num_members
-                    .map_or_else(|| "-".to_string(), |n| n.to_string());
+                let members = channel.num_members.map_or("-".into(), |n| n.to_string());
                 let topic = channel.topic.as_deref().unwrap_or("-");
-
                 table.add_row(vec![
                     Cell::new(format!("#{}", channel.name)).fg(Color::Cyan),
-                    Cell::new(channel_type),
+                    Cell::new(kind),
                     Cell::new(members),
                     Cell::new(truncate(topic, 40)),
                 ]);
             }
-
             println!("{table}");
             println!("\n{} channels", channels.len());
         }
@@ -158,26 +164,26 @@ pub fn output_channels(channels: &[SlackChannel], format: OutputFormat) -> Resul
 pub fn output_channel_detail(channel: &SlackChannel, format: OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Table => {
-            println!("{}", "-".repeat(60));
+            let sep = "-".repeat(60);
+            let kind = if channel.is_private {
+                "private"
+            } else {
+                "public"
+            };
+            let member = if channel.is_member { "yes" } else { "no" };
+            println!("{sep}");
             println!("#{} ({})", channel.name, channel.id);
-            println!("{}", "-".repeat(60));
-            println!(
-                "Type:    {}",
-                if channel.is_private {
-                    "private"
-                } else {
-                    "public"
-                }
-            );
-            println!("Member:  {}", if channel.is_member { "yes" } else { "no" });
+            println!("{sep}");
+            println!("Type:    {kind}");
+            println!("Member:  {member}");
             if let Some(n) = channel.num_members {
-                println!("Members: {}", n);
+                println!("Members: {n}");
             }
             if let Some(ref topic) = channel.topic {
-                println!("\nTopic: {}", topic);
+                println!("\nTopic: {topic}");
             }
             if let Some(ref purpose) = channel.purpose {
-                println!("\nPurpose: {}", purpose);
+                println!("\nPurpose: {purpose}");
             }
         }
         OutputFormat::Json => {
@@ -201,10 +207,8 @@ pub fn output_messages(
                 println!("No messages found.");
                 return Ok(());
             }
-
-            println!("Messages in #{}", channel_name);
+            println!("Messages in #{channel_name}");
             println!("{}", "-".repeat(60));
-
             for msg in messages.iter().rev() {
                 let time = format_timestamp(&msg.ts);
                 let user = msg
@@ -214,11 +218,9 @@ pub fn output_messages(
                     .unwrap_or("unknown");
                 let thread = msg
                     .reply_count
-                    .map_or(String::new(), |n| format!(" [{} replies]", n));
-
-                println!("[{}] {}: {}{}", time, user, msg.text, thread);
+                    .map_or(String::new(), |n| format!(" [{n} replies]"));
+                println!("[{time}] {user}: {}{thread}", msg.text);
             }
-
             println!("\n{} messages", messages.len());
         }
         OutputFormat::Json => {
@@ -242,18 +244,12 @@ pub fn output_search_results(
                 println!("No messages found.");
                 return Ok(());
             }
-
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_content_arrangement(ContentArrangement::Dynamic);
-            table.set_header(vec!["Channel", "User", "Time", "Message"]);
-
+            let mut table = new_table(vec!["Channel", "User", "Time", "Message"]);
             for m in &results.matches {
                 let time = format_timestamp(&m.ts);
                 let user = m.username.as_deref().unwrap_or("-");
                 let channel = format_channel_name(&m.channel.name, user_lookup);
                 let text = clean_message_text(&m.text, user_lookup);
-
                 table.add_row(vec![
                     Cell::new(&channel).fg(Color::Cyan),
                     Cell::new(user),
@@ -286,16 +282,10 @@ pub fn output_users(users: &[SlackUser], format: OutputFormat) -> Result<()> {
                 println!("No users found.");
                 return Ok(());
             }
-
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_content_arrangement(ContentArrangement::Dynamic);
-            table.set_header(vec!["Username", "Name", "Timezone"]);
-
+            let mut table = new_table(vec!["Username", "Name", "Timezone"]);
             for user in users {
                 let name = user.real_name.as_deref().unwrap_or("-");
                 let tz = user.tz.as_deref().unwrap_or("-");
-
                 table.add_row(vec![
                     Cell::new(format!("@{}", user.name)).fg(Color::Cyan),
                     Cell::new(name),
@@ -322,21 +312,88 @@ pub fn output_config_status(
     team_name: Option<&str>,
     default_channel: &str,
 ) {
+    let bot = if is_configured { "Yes" } else { "No" };
+    let user = if has_user_token {
+        "Yes (search enabled)"
+    } else {
+        "No (search disabled)"
+    };
     println!("Slack Configuration");
     println!("{}", "-".repeat(40));
-    println!("Bot token:  {}", if is_configured { "Yes" } else { "No" });
-    println!(
-        "User token: {}",
-        if has_user_token {
-            "Yes (search enabled)"
-        } else {
-            "No (search disabled)"
-        }
-    );
+    println!("Bot token:  {bot}");
+    println!("User token: {user}");
     if let Some(name) = team_name {
-        println!("Workspace:  {}", name);
+        println!("Workspace:  {name}");
     }
     if !default_channel.is_empty() {
-        println!("Default:    {}", default_channel);
+        println!("Default:    {default_channel}");
     }
+}
+
+/// Output config file path
+pub fn output_config_path(path: &Path) {
+    println!("Config:     {}", path.display());
+}
+
+/// Output authentication result
+pub fn output_auth_result(result: &AuthResult) {
+    match result {
+        AuthResult::UserTokenSaved => {
+            println!("User token saved successfully!");
+            println!("\nYou can now use `hu slack search` command.");
+        }
+        AuthResult::BotTokenSaved { team_name } => {
+            println!("Token saved successfully!");
+            println!("Connected to: {}", team_name);
+            println!("\nYou can now use `hu slack channels` and other commands.");
+        }
+        AuthResult::OAuthCompleted { team_name } => {
+            println!("\nAuthentication successful!");
+            if let Some(team) = team_name {
+                println!("Connected to: {}", team);
+            }
+            println!("\nYou can now use `hu slack channels` and other commands.");
+        }
+    }
+}
+
+/// Output whoami information
+pub fn output_whoami(info: &AuthInfo) {
+    println!("User ID:   {}", info.user_id);
+    println!("User:      {}", info.user);
+    println!("Team ID:   {}", info.team_id);
+    println!("Team:      {}", info.team);
+}
+
+/// Output send message confirmation
+pub fn output_send_confirmation(channel: &str, ts: &str) {
+    println!("Message sent to {} (ts: {})", channel, ts);
+}
+
+/// Output tidy dry run notice
+pub fn output_tidy_dry_run() {
+    println!("DRY RUN - no channels will be marked as read\n");
+}
+
+/// Output individual tidy results (marked/mentioned channels)
+pub fn output_tidy_results(results: &[tidy::TidyResult]) {
+    for r in results {
+        match &r.action {
+            tidy::TidyAction::Skipped => {}
+            tidy::TidyAction::MarkedRead => {
+                println!("Marked read: #{}", r.channel_name);
+            }
+            tidy::TidyAction::HasMention(mention) => {
+                println!("Has mention: #{} - {}", r.channel_name, mention);
+            }
+        }
+    }
+}
+
+/// Output tidy summary
+pub fn output_tidy_summary(summary: &TidySummary) {
+    println!("\nSummary:");
+    println!("  Marked as read: {}", summary.marked_read);
+    println!("  Has mentions:   {}", summary.has_mentions);
+    println!("  Already read:   {}", summary.already_read);
 }

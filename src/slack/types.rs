@@ -108,6 +108,41 @@ pub enum OutputFormat {
     Json,
 }
 
+/// Authenticated user info returned from auth.test
+#[derive(Debug, Clone)]
+pub struct AuthInfo {
+    /// User ID (e.g., "U04H482TK6Z")
+    pub user_id: String,
+    /// Username
+    pub user: String,
+    /// Team/workspace ID
+    pub team_id: String,
+    /// Team/workspace name
+    pub team: String,
+}
+
+/// Result of an auth operation
+#[derive(Debug, Clone)]
+pub enum AuthResult {
+    /// Bot token was saved
+    BotTokenSaved { team_name: String },
+    /// User token was saved
+    UserTokenSaved,
+    /// OAuth flow completed
+    OAuthCompleted { team_name: Option<String> },
+}
+
+/// Summary of a tidy operation
+#[derive(Debug, Clone)]
+pub struct TidySummary {
+    /// Number of channels marked as read
+    pub marked_read: usize,
+    /// Number of channels with mentions (skipped)
+    pub has_mentions: usize,
+    /// Number of channels already read (skipped)
+    pub already_read: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -232,5 +267,83 @@ mod tests {
         };
         let cloned = channel.clone();
         assert_eq!(cloned.id, channel.id);
+    }
+
+    #[test]
+    fn test_auth_info_debug() {
+        let info = AuthInfo {
+            user_id: "U12345".to_string(),
+            user: "alice".to_string(),
+            team_id: "T12345".to_string(),
+            team: "Acme Corp".to_string(),
+        };
+        let debug = format!("{:?}", info);
+        assert!(debug.contains("AuthInfo"));
+        assert!(debug.contains("alice"));
+    }
+
+    #[test]
+    fn test_auth_info_clone() {
+        let info = AuthInfo {
+            user_id: "U12345".to_string(),
+            user: "alice".to_string(),
+            team_id: "T12345".to_string(),
+            team: "Acme Corp".to_string(),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.user_id, "U12345");
+        assert_eq!(cloned.team, "Acme Corp");
+    }
+
+    #[test]
+    fn test_auth_result_debug() {
+        let result = AuthResult::BotTokenSaved {
+            team_name: "Acme".to_string(),
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("BotTokenSaved"));
+
+        let result = AuthResult::UserTokenSaved;
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("UserTokenSaved"));
+
+        let result = AuthResult::OAuthCompleted {
+            team_name: Some("Team".to_string()),
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("OAuthCompleted"));
+    }
+
+    #[test]
+    fn test_auth_result_clone() {
+        let result = AuthResult::BotTokenSaved {
+            team_name: "Acme".to_string(),
+        };
+        let cloned = result.clone();
+        assert!(matches!(cloned, AuthResult::BotTokenSaved { .. }));
+    }
+
+    #[test]
+    fn test_tidy_summary_debug() {
+        let summary = TidySummary {
+            marked_read: 5,
+            has_mentions: 2,
+            already_read: 10,
+        };
+        let debug = format!("{:?}", summary);
+        assert!(debug.contains("TidySummary"));
+    }
+
+    #[test]
+    fn test_tidy_summary_clone() {
+        let summary = TidySummary {
+            marked_read: 5,
+            has_mentions: 2,
+            already_read: 10,
+        };
+        let cloned = summary.clone();
+        assert_eq!(cloned.marked_read, 5);
+        assert_eq!(cloned.has_mentions, 2);
+        assert_eq!(cloned.already_read, 10);
     }
 }

@@ -417,3 +417,107 @@ fn test_output_config_status_not_configured() {
 fn test_output_config_status_partial() {
     output_config_status(true, false, Some("My Team"), "");
 }
+
+#[test]
+fn test_output_config_path() {
+    use std::path::PathBuf;
+    let path = PathBuf::from("/home/user/.config/hu/settings.toml");
+    // Should not panic
+    output_config_path(&path);
+}
+
+#[test]
+fn test_output_auth_result_user_token() {
+    let result = AuthResult::UserTokenSaved;
+    // Should not panic
+    output_auth_result(&result);
+}
+
+#[test]
+fn test_output_auth_result_bot_token() {
+    let result = AuthResult::BotTokenSaved {
+        team_name: "Acme Corp".to_string(),
+    };
+    output_auth_result(&result);
+}
+
+#[test]
+fn test_output_auth_result_oauth_with_team() {
+    let result = AuthResult::OAuthCompleted {
+        team_name: Some("Acme Corp".to_string()),
+    };
+    output_auth_result(&result);
+}
+
+#[test]
+fn test_output_auth_result_oauth_without_team() {
+    let result = AuthResult::OAuthCompleted { team_name: None };
+    output_auth_result(&result);
+}
+
+#[test]
+fn test_output_whoami() {
+    let info = AuthInfo {
+        user_id: "U04H482TK6Z".to_string(),
+        user: "alice".to_string(),
+        team_id: "T12345".to_string(),
+        team: "Acme Corp".to_string(),
+    };
+    // Should not panic
+    output_whoami(&info);
+}
+
+#[test]
+fn test_output_send_confirmation() {
+    output_send_confirmation("#general", "1704067200.123456");
+}
+
+#[test]
+fn test_output_tidy_dry_run() {
+    output_tidy_dry_run();
+}
+
+#[test]
+fn test_output_tidy_results_empty() {
+    let results: Vec<tidy::TidyResult> = vec![];
+    output_tidy_results(&results);
+}
+
+#[test]
+fn test_output_tidy_results_mixed() {
+    let results = vec![
+        tidy::TidyResult {
+            channel_name: "general".to_string(),
+            action: tidy::TidyAction::MarkedRead,
+        },
+        tidy::TidyResult {
+            channel_name: "random".to_string(),
+            action: tidy::TidyAction::Skipped,
+        },
+        tidy::TidyResult {
+            channel_name: "dev".to_string(),
+            action: tidy::TidyAction::HasMention("@alice mentioned you".to_string()),
+        },
+    ];
+    output_tidy_results(&results);
+}
+
+#[test]
+fn test_output_tidy_summary() {
+    let summary = TidySummary {
+        marked_read: 5,
+        has_mentions: 2,
+        already_read: 10,
+    };
+    output_tidy_summary(&summary);
+}
+
+#[test]
+fn test_output_tidy_summary_zeros() {
+    let summary = TidySummary {
+        marked_read: 0,
+        has_mentions: 0,
+        already_read: 0,
+    };
+    output_tidy_summary(&summary);
+}

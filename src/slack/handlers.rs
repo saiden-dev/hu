@@ -1,11 +1,8 @@
 use anyhow::Result;
 
-use super::auth;
 use super::client::SlackClient;
-use super::config::{self, load_config};
 use super::display;
 use super::service;
-use super::tidy;
 use super::types::OutputFormat;
 use super::SlackCommands;
 
@@ -34,81 +31,16 @@ pub async fn run(command: SlackCommands) -> Result<()> {
     }
 }
 
-/// Verify a Slack token by calling auth.test and return the response
-async fn verify_token(token: &str) -> Result<serde_json::Value> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://slack.com/api/auth.test")
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await?;
-
-    let result: serde_json::Value = response.json().await?;
-
-    if result.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-        let error = result
-            .get("error")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unknown");
-        anyhow::bail!("Token validation failed: {}", error);
-    }
-
-    Ok(result)
-}
-
 /// Authenticate with Slack via OAuth or direct token
+#[cfg(not(tarpaulin_include))]
 async fn cmd_auth(token: Option<&str>, user_token: Option<&str>, port: u16) -> Result<()> {
-    // If user token provided, save it
-    if let Some(user_tok) = user_token {
-        if !user_tok.starts_with("xoxp-") {
-            anyhow::bail!("Invalid user token format. Token should start with 'xoxp-'");
-        }
-        verify_token(user_tok).await?;
-        config::update_user_token(user_tok)?;
-        println!("User token saved successfully!");
-        println!("\nYou can now use `hu slack search` command.");
-        return Ok(());
-    }
-
-    // If bot token provided directly, save it and verify
-    if let Some(bot_token) = token {
-        if !bot_token.starts_with("xoxb-") {
-            anyhow::bail!("Invalid bot token format. Token should start with 'xoxb-'");
-        }
-        let result = verify_token(bot_token).await?;
-        let team_id = result
-            .get("team_id")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("");
-        let team_name = result
-            .get("team")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("Unknown");
-        config::update_oauth_tokens(bot_token, team_id, team_name)?;
-        println!("Token saved successfully!");
-        println!("Connected to: {}", team_name);
-        println!("\nYou can now use `hu slack channels` and other commands.");
-        return Ok(());
-    }
-
-    // Otherwise, run OAuth flow
-    let result = auth::run_oauth_flow(port).await?;
-
-    if result.success {
-        println!("\nAuthentication successful!");
-        if let Some(team) = result.team_name {
-            println!("Connected to: {}", team);
-        }
-        println!("\nYou can now use `hu slack channels` and other commands.");
-    } else {
-        let error = result.error.unwrap_or_else(|| "Unknown error".to_string());
-        anyhow::bail!("Authentication failed: {}", error);
-    }
-
+    let result = service::authenticate(token, user_token, port).await?;
+    display::output_auth_result(&result);
     Ok(())
 }
 
 /// List channels
+#[cfg(not(tarpaulin_include))]
 async fn cmd_channels(json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -126,6 +58,7 @@ async fn cmd_channels(json: bool) -> Result<()> {
 }
 
 /// Get channel info
+#[cfg(not(tarpaulin_include))]
 async fn cmd_info(channel: &str, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -143,6 +76,7 @@ async fn cmd_info(channel: &str, json: bool) -> Result<()> {
 }
 
 /// Send a message
+#[cfg(not(tarpaulin_include))]
 async fn cmd_send(channel: &str, text: &str) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -150,11 +84,12 @@ async fn cmd_send(channel: &str, text: &str) -> Result<()> {
     let client = SlackClient::new()?;
     let (sent_channel, ts) = service::send_message(&client, channel, text).await?;
 
-    println!("Message sent to {} (ts: {})", sent_channel, ts);
+    display::output_send_confirmation(&sent_channel, &ts);
     Ok(())
 }
 
 /// Get message history
+#[cfg(not(tarpaulin_include))]
 async fn cmd_history(channel: &str, limit: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -167,13 +102,13 @@ async fn cmd_history(channel: &str, limit: usize, json: bool) -> Result<()> {
         OutputFormat::Table
     };
 
-    // Get channel name for display
     let channel_name = channel.trim_start_matches('#');
     display::output_messages(&messages, channel_name, format)?;
     Ok(())
 }
 
 /// Search messages
+#[cfg(not(tarpaulin_include))]
 async fn cmd_search(query: &str, count: usize, json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -186,14 +121,13 @@ async fn cmd_search(query: &str, count: usize, json: bool) -> Result<()> {
         OutputFormat::Table
     };
 
-    // Build user lookup for resolving DM user IDs to names
     let user_lookup = service::build_user_lookup(&client).await?;
-
     display::output_search_results(&results, format, &user_lookup)?;
     Ok(())
 }
 
 /// List users
+#[cfg(not(tarpaulin_include))]
 async fn cmd_users(json: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_configured(&config)?;
@@ -211,6 +145,7 @@ async fn cmd_users(json: bool) -> Result<()> {
 }
 
 /// Show configuration status
+#[cfg(not(tarpaulin_include))]
 fn cmd_config() -> Result<()> {
     let config = service::get_config()?;
 
@@ -221,104 +156,36 @@ fn cmd_config() -> Result<()> {
         &config.default_channel,
     );
 
-    if let Some(path) = config::config_path() {
-        println!("Config:     {}", path.display());
+    if let Some(path) = service::config_path() {
+        display::output_config_path(&path);
     }
 
     Ok(())
 }
 
 /// Show current user info from token
+#[cfg(not(tarpaulin_include))]
 async fn cmd_whoami() -> Result<()> {
-    let config = load_config()?;
-    let token = config
-        .oauth
-        .user_token
-        .or(config.oauth.bot_token)
-        .ok_or_else(|| anyhow::anyhow!("No token configured"))?;
-
-    let result = verify_token(&token).await?;
-
-    println!(
-        "User ID:   {}",
-        result
-            .get("user_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-    );
-    println!(
-        "User:      {}",
-        result
-            .get("user")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-    );
-    println!(
-        "Team ID:   {}",
-        result
-            .get("team_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-    );
-    println!(
-        "Team:      {}",
-        result
-            .get("team")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-    );
-
+    let config = service::get_config()?;
+    let info = service::whoami(&config).await?;
+    display::output_whoami(&info);
     Ok(())
 }
 
 /// Tidy channels - mark as read if no mentions
+#[cfg(not(tarpaulin_include))]
 async fn cmd_tidy(dry_run: bool) -> Result<()> {
     let config = service::get_config()?;
     service::ensure_user_token(&config)?;
 
-    let client = SlackClient::new()?;
-    let token = config.oauth.user_token.as_deref().unwrap();
-    let result = verify_token(token).await?;
-
-    let user_info = tidy::UserInfo {
-        user_id: result
-            .get("user_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        name: "Adam".to_string(),
-        full_name: "Adam Ladachowski".to_string(),
-    };
-
     if dry_run {
-        println!("DRY RUN - no channels will be marked as read\n");
+        display::output_tidy_dry_run();
     }
 
-    let results = tidy::tidy_channels(&client, &user_info, dry_run).await?;
+    let client = SlackClient::new()?;
+    let (results, summary) = service::run_tidy(&client, &config, dry_run).await?;
 
-    // Print results
-    let mut marked = 0;
-    let mut skipped = 0;
-    let mut has_mentions = 0;
-
-    for r in &results {
-        match &r.action {
-            tidy::TidyAction::Skipped => skipped += 1,
-            tidy::TidyAction::MarkedRead => {
-                marked += 1;
-                println!("Marked read: #{}", r.channel_name);
-            }
-            tidy::TidyAction::HasMention(mention) => {
-                has_mentions += 1;
-                println!("Has mention: #{} - {}", r.channel_name, mention);
-            }
-        }
-    }
-
-    println!("\nSummary:");
-    println!("  Marked as read: {}", marked);
-    println!("  Has mentions:   {}", has_mentions);
-    println!("  Already read:   {}", skipped);
-
+    display::output_tidy_results(&results);
+    display::output_tidy_summary(&summary);
     Ok(())
 }
