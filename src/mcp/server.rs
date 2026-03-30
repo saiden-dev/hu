@@ -120,7 +120,7 @@ async fn handle_tools_call(id: serde_json::Value, params: &serde_json::Value) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    const EXPECTED_TOOL_COUNT: usize = 7;
+    const EXPECTED_TOOL_COUNT: usize = 6;
 
     // --- Constants ---
 

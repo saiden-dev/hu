@@ -79,21 +79,6 @@ pub enum DataCommand {
         json: bool,
     },
 
-    /// Pricing analysis
-    Pricing {
-        /// Subscription tier
-        #[arg(short, long, default_value = "max20x")]
-        subscription: String,
-
-        /// Billing day of month
-        #[arg(short, long, default_value = "6")]
-        billing_day: u32,
-
-        /// Output as JSON
-        #[arg(short, long)]
-        json: bool,
-    },
-
     /// Branch activity statistics
     Branches {
         /// Filter by branch name
@@ -347,22 +332,6 @@ mod tests {
         let cli = TestCli::try_parse_from(["test", "errors"]).unwrap();
         if let super::DataCommand::Errors { recent, .. } = cli.cmd {
             assert_eq!(recent, 7);
-        } else {
-            panic!("wrong variant");
-        }
-    }
-
-    #[test]
-    fn parse_pricing() {
-        let cli = TestCli::try_parse_from(["test", "pricing"]).unwrap();
-        if let super::DataCommand::Pricing {
-            subscription,
-            billing_day,
-            ..
-        } = cli.cmd
-        {
-            assert_eq!(subscription, "max20x");
-            assert_eq!(billing_day, 6);
         } else {
             panic!("wrong variant");
         }

@@ -737,16 +737,6 @@ hu data errors --json                 # JSON output
 ```
 "#;
 
-pub const CMD_DATA_PRICING: &str = r#"Pricing analysis.
-
-```bash
-hu data pricing                       # Show pricing analysis
-hu data pricing -s max20x             # Subscription tier
-hu data pricing -b 6                  # Billing day of month
-hu data pricing --json                # JSON output
-```
-"#;
-
 pub const CMD_DATA_SESSION: &str = r#"Session operations.
 
 ```bash
@@ -1294,13 +1284,6 @@ pub static COMPONENTS: &[Component] = &[
         content: CMD_DATA_ERRORS,
     },
     Component {
-        id: "commands/hu/data/pricing",
-        kind: ComponentKind::Command,
-        description: "Pricing analysis",
-        path: "commands/hu/data/pricing.md",
-        content: CMD_DATA_PRICING,
-    },
-    Component {
         id: "commands/hu/data/session",
         kind: ComponentKind::Command,
         description: "Session operations",
@@ -1365,7 +1348,7 @@ mod tests {
 
     #[test]
     fn components_count() {
-        assert_eq!(COMPONENTS.len(), 74); // 6 hooks + 68 commands
+        assert_eq!(COMPONENTS.len(), 73); // 6 hooks + 67 commands
     }
 
     #[test]
@@ -1375,7 +1358,7 @@ mod tests {
 
     #[test]
     fn commands_count() {
-        assert_eq!(get_commands().len(), 68);
+        assert_eq!(get_commands().len(), 67);
     }
 
     #[test]

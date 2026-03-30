@@ -356,47 +356,6 @@ fn output_errors_json() {
     assert!(output_errors(&[], &OutputFormat::Json).is_ok());
 }
 
-fn make_pricing_data() -> PricingData {
-    PricingData {
-        subscription: "max20x".to_string(),
-        subscription_price: 200.0,
-        billing_cycle: pricing::calculate_billing_cycle(6, chrono::Utc::now().timestamp_millis()),
-        period_usage: PeriodUsage {
-            messages: 100,
-            input_tokens: 500_000,
-            output_tokens: 200_000,
-        },
-        model_costs: vec![ModelUsageWithCost {
-            model: "claude-sonnet-4-5-20251101".to_string(),
-            input_tokens: 500_000,
-            output_tokens: 200_000,
-            cost: 4.5,
-        }],
-        total_api_cost: 4.5,
-        projected_cost: 9.0,
-        break_even: pricing::calculate_break_even(200.0),
-        value_comparisons: pricing::get_value_comparison(4.5),
-    }
-}
-
-#[test]
-fn output_pricing_table() {
-    assert!(output_pricing(&make_pricing_data(), &OutputFormat::Table).is_ok());
-}
-
-#[test]
-fn output_pricing_json() {
-    assert!(output_pricing(&make_pricing_data(), &OutputFormat::Json).is_ok());
-}
-
-#[test]
-fn output_pricing_empty_models() {
-    let mut data = make_pricing_data();
-    data.model_costs = vec![];
-    data.value_comparisons = vec![];
-    assert!(output_pricing(&data, &OutputFormat::Table).is_ok());
-}
-
 #[test]
 fn output_branches_empty() {
     assert!(output_branches(&[], &OutputFormat::Table).is_ok());
@@ -444,38 +403,6 @@ fn output_branches_json() {
 }
 
 #[test]
-fn build_model_costs_empty() {
-    let costs = build_model_costs(&[]);
-    assert!(costs.is_empty());
-}
-
-#[test]
-fn build_model_costs_calculates() {
-    let usage = vec![ModelTokenUsage {
-        model: "claude-sonnet-4-5-20251101".to_string(),
-        input_tokens: 1_000_000,
-        output_tokens: 1_000_000,
-    }];
-    let costs = build_model_costs(&usage);
-    assert_eq!(costs.len(), 1);
-    assert!((costs[0].cost - 18.0).abs() < 0.01);
-}
-
-#[test]
-fn output_pricing_negative_savings() {
-    let mut data = make_pricing_data();
-    data.total_api_cost = 5.0;
-    data.value_comparisons = vec![ValueComparison {
-        service: "Test".to_string(),
-        plan: "Premium".to_string(),
-        price: 200.0,
-        savings: -195.0,
-        savings_percent: -3900.0,
-    }];
-    assert!(output_pricing(&data, &OutputFormat::Table).is_ok());
-}
-
-#[test]
 fn output_todos_unknown_status() {
     let todo = Todo {
         id: 1,
@@ -498,20 +425,6 @@ fn output_pending_todos_unknown_status() {
         project: "/proj".to_string(),
     };
     assert!(output_pending_todos(&[todo], &OutputFormat::Table).is_ok());
-}
-
-#[test]
-fn output_pricing_positive_savings() {
-    let mut data = make_pricing_data();
-    data.total_api_cost = 500.0;
-    data.value_comparisons = vec![ValueComparison {
-        service: "Test".to_string(),
-        plan: "Basic".to_string(),
-        price: 20.0,
-        savings: 480.0,
-        savings_percent: 96.0,
-    }];
-    assert!(output_pricing(&data, &OutputFormat::Table).is_ok());
 }
 
 #[test]

@@ -5,13 +5,11 @@ use anyhow::{bail, Result};
 use super::config::{self, DataConfig};
 use super::db::SqliteStore;
 use super::paths;
-use super::pricing;
 use super::queries;
 use super::sync;
 use super::types::{
-    build_model_costs, start_of_today_ms, BranchStats, DebugError, Message, PricingData,
-    SearchResult, Session, SyncResult, Todo, TodoWithProject, ToolUsageDetail, ToolUsageStats,
-    UsageStats,
+    start_of_today_ms, BranchStats, DebugError, Message, SearchResult, Session, SyncResult, Todo,
+    TodoWithProject, ToolUsageDetail, ToolUsageStats, UsageStats,
 };
 
 // --- DB lifecycle ---
@@ -191,39 +189,6 @@ pub fn scan_debug_errors(claude_dir: &Path, recent_days: u32) -> Result<Vec<Debu
 
     errors.truncate(50);
     Ok(errors)
-}
-
-// --- Pricing ---
-
-pub fn compute_pricing(
-    store: &SqliteStore,
-    subscription: &str,
-    billing_day: u32,
-) -> Result<PricingData> {
-    let now = chrono::Utc::now().timestamp_millis();
-    let cycle = pricing::calculate_billing_cycle(billing_day, now);
-    let sub_price = pricing::get_subscription_price(subscription);
-
-    let period_usage = queries::get_period_usage(&store.conn, cycle.start_ms)?;
-    let model_usage = queries::get_period_model_usage(&store.conn, cycle.start_ms)?;
-    let model_costs = build_model_costs(&model_usage);
-    let total_api_cost: f64 = model_costs.iter().map(|m| m.cost).sum();
-    let projected =
-        pricing::project_cycle_cost(total_api_cost, cycle.days_elapsed, cycle.total_days);
-    let break_even = pricing::calculate_break_even(sub_price);
-    let comparisons = pricing::get_value_comparison(total_api_cost);
-
-    Ok(PricingData {
-        subscription: subscription.to_string(),
-        subscription_price: sub_price,
-        billing_cycle: cycle,
-        period_usage,
-        model_costs,
-        total_api_cost,
-        projected_cost: projected,
-        break_even,
-        value_comparisons: comparisons,
-    })
 }
 
 // --- Branches ---
@@ -569,25 +534,6 @@ mod tests {
         assert_eq!(errors.len(), 50);
 
         let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    // --- Pricing ---
-
-    #[test]
-    fn compute_pricing_returns_data() {
-        let store = open_test_db();
-        seed_data(&store);
-        let data = compute_pricing(&store, "max5x", 1).unwrap();
-        assert_eq!(data.subscription, "max5x");
-        assert!(data.subscription_price > 0.0);
-    }
-
-    #[test]
-    fn compute_pricing_empty_db() {
-        let store = open_test_db();
-        let data = compute_pricing(&store, "max20x", 15).unwrap();
-        assert_eq!(data.total_api_cost, 0.0);
-        assert_eq!(data.period_usage.messages, 0);
     }
 
     // --- Branches ---

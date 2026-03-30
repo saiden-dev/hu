@@ -2,19 +2,14 @@ use anyhow::Result;
 use comfy_table::presets::UTF8_FULL_CONDENSED;
 use comfy_table::{Cell, Color, Table};
 
-use super::pricing;
 use super::types::{
-    BranchWithPr, DebugError, Message, ModelUsage, OutputFormat, PricingData, SearchResult,
-    Session, SyncResult, Todo, TodoWithProject, ToolUsageDetail, ToolUsageStats, UsageStats,
+    BranchWithPr, DebugError, Message, ModelUsage, OutputFormat, SearchResult, Session, SyncResult,
+    Todo, TodoWithProject, ToolUsageDetail, ToolUsageStats, UsageStats,
 };
 
 // Re-export types needed by display tests for constructing composite test data
 #[cfg(test)]
-pub(crate) use super::pricing::ValueComparison;
-#[cfg(test)]
-pub(crate) use super::queries::{ModelTokenUsage, PeriodUsage};
-#[cfg(test)]
-pub(crate) use super::types::{build_model_costs, BranchStats, ModelUsageWithCost, PrInfo};
+pub(crate) use super::types::{BranchStats, PrInfo};
 
 #[cfg(test)]
 mod tests;
@@ -61,6 +56,16 @@ pub fn status_color(status: &str) -> Color {
         "in_progress" => Color::Cyan,
         "completed" => Color::Green,
         _ => Color::White,
+    }
+}
+
+fn format_cost(cost: f64) -> String {
+    if cost < 0.01 {
+        format!("${:.4}", cost)
+    } else if cost < 1.0 {
+        format!("${:.3}", cost)
+    } else {
+        format!("${:.2}", cost)
     }
 }
 
@@ -133,7 +138,7 @@ pub fn output_sessions(sessions: &[Session], format: &OutputFormat) -> Result<()
                     Cell::new(truncate(s.display.as_deref().unwrap_or("-"), 25)),
                     Cell::new(time_ago_ms(s.started_at)),
                     Cell::new(s.message_count.to_string()),
-                    Cell::new(pricing::format_cost(s.total_cost_usd)),
+                    Cell::new(format_cost(s.total_cost_usd)),
                 ]);
             }
             println!("{table}");
@@ -219,7 +224,7 @@ pub fn output_stats(
             println!("Usage Statistics:");
             println!("  Sessions: {}", stats.total_sessions);
             println!("  Messages: {}", stats.total_messages);
-            println!("  Total cost: {}", pricing::format_cost(stats.total_cost));
+            println!("  Total cost: {}", format_cost(stats.total_cost));
             println!(
                 "  Input tokens: {}",
                 format_tokens(stats.total_input_tokens)
@@ -238,7 +243,7 @@ pub fn output_stats(
                     table.add_row(vec![
                         Cell::new(&m.model),
                         Cell::new(m.count.to_string()),
-                        Cell::new(pricing::format_cost(m.cost)),
+                        Cell::new(format_cost(m.cost)),
                         Cell::new(format_tokens(m.input_tokens)),
                         Cell::new(format_tokens(m.output_tokens)),
                     ]);
@@ -398,104 +403,6 @@ pub fn output_errors(errors: &[DebugError], format: &OutputFormat) -> Result<()>
     Ok(())
 }
 
-pub fn output_pricing(data: &PricingData, format: &OutputFormat) -> Result<()> {
-    match format {
-        OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(data)?);
-        }
-        OutputFormat::Table => {
-            println!(
-                "Pricing Analysis ({} plan, ${}/mo):",
-                data.subscription, data.subscription_price
-            );
-            println!(
-                "  Billing cycle: {} days elapsed, {} remaining (of {})",
-                data.billing_cycle.days_elapsed,
-                data.billing_cycle.days_remaining,
-                data.billing_cycle.total_days
-            );
-            println!();
-
-            println!("Current Period Usage:");
-            println!("  Messages: {}", data.period_usage.messages);
-            println!(
-                "  Input tokens: {}",
-                format_tokens(data.period_usage.input_tokens)
-            );
-            println!(
-                "  Output tokens: {}",
-                format_tokens(data.period_usage.output_tokens)
-            );
-            println!();
-
-            if !data.model_costs.is_empty() {
-                println!("API Cost by Model:");
-                let mut table = Table::new();
-                table.load_preset(UTF8_FULL_CONDENSED);
-                table.set_header(vec!["Model", "Input", "Output", "Cost"]);
-                for m in &data.model_costs {
-                    table.add_row(vec![
-                        Cell::new(&m.model),
-                        Cell::new(format_tokens(m.input_tokens)),
-                        Cell::new(format_tokens(m.output_tokens)),
-                        Cell::new(pricing::format_cost(m.cost)),
-                    ]);
-                }
-                println!("{table}");
-            }
-
-            println!(
-                "Total API-equivalent cost: {}",
-                pricing::format_cost(data.total_api_cost)
-            );
-            println!(
-                "Projected cycle cost: {}",
-                pricing::format_cost(data.projected_cost)
-            );
-            println!();
-
-            println!("Break-even Analysis (Opus 4.5 rates):");
-            println!(
-                "  Output tokens to break even: {}",
-                format_tokens(data.break_even.break_even_output_tokens)
-            );
-            println!(
-                "  Input tokens to break even: {}",
-                format_tokens(data.break_even.break_even_input_tokens)
-            );
-
-            if !data.value_comparisons.is_empty() {
-                println!(
-                    "\nValue Comparison (vs API cost {}):",
-                    pricing::format_cost(data.total_api_cost)
-                );
-                let mut table = Table::new();
-                table.load_preset(UTF8_FULL_CONDENSED);
-                table.set_header(vec!["Service", "Plan", "Price", "Savings"]);
-                for v in &data.value_comparisons {
-                    let savings_str = if v.savings > 0.0 {
-                        format!(
-                            "{} ({:.0}%)",
-                            pricing::format_cost(v.savings),
-                            v.savings_percent
-                        )
-                    } else {
-                        format!("-{}", pricing::format_cost(-v.savings))
-                    };
-                    table.add_row(vec![
-                        Cell::new(&v.service),
-                        Cell::new(&v.plan),
-                        Cell::new(format!("${:.0}/mo", v.price)),
-                        Cell::new(savings_str),
-                    ]);
-                }
-                println!("{table}");
-            }
-        }
-    }
-    Ok(())
-}
-
 pub fn output_branches(branches: &[BranchWithPr], format: &OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -526,7 +433,7 @@ pub fn output_branches(branches: &[BranchWithPr], format: &OutputFormat) -> Resu
                     Cell::new(truncate(&b.branch.git_branch, 30)),
                     Cell::new(b.branch.session_count.to_string()),
                     Cell::new(b.branch.total_messages.to_string()),
-                    Cell::new(pricing::format_cost(b.branch.total_cost)),
+                    Cell::new(format_cost(b.branch.total_cost)),
                     Cell::new(time_ago_ms(b.branch.last_activity)),
                     Cell::new(pr_str),
                 ]);

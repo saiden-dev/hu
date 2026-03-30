@@ -2,9 +2,6 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::util::OutputFormat;
 
-use super::pricing::{self, BillingCycle, BreakEvenAnalysis, ValueComparison};
-use super::queries::{ModelTokenUsage, PeriodUsage};
-
 // --- JSONL source types (read from Claude Code files) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,28 +189,7 @@ pub struct SyncResult {
     pub todos: usize,
 }
 
-// --- Pricing / branch composite types ---
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ModelUsageWithCost {
-    pub model: String,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub cost: f64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PricingData {
-    pub subscription: String,
-    pub subscription_price: f64,
-    pub billing_cycle: BillingCycle,
-    pub period_usage: PeriodUsage,
-    pub model_costs: Vec<ModelUsageWithCost>,
-    pub total_api_cost: f64,
-    pub projected_cost: f64,
-    pub break_even: BreakEvenAnalysis,
-    pub value_comparisons: Vec<ValueComparison>,
-}
+// --- Branch composite types ---
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BranchWithPr {
@@ -230,21 +206,6 @@ pub struct PrInfo {
 }
 
 // --- Service helpers ---
-
-pub fn build_model_costs(model_usage: &[ModelTokenUsage]) -> Vec<ModelUsageWithCost> {
-    model_usage
-        .iter()
-        .map(|m| {
-            let cost = pricing::calculate_cost(Some(&m.model), m.input_tokens, m.output_tokens);
-            ModelUsageWithCost {
-                model: m.model.clone(),
-                input_tokens: m.input_tokens,
-                output_tokens: m.output_tokens,
-                cost,
-            }
-        })
-        .collect()
-}
 
 pub fn start_of_today_ms() -> i64 {
     let now = chrono::Utc::now();
@@ -504,41 +465,6 @@ mod tests {
     }
 
     #[test]
-    fn build_model_costs_empty() {
-        let costs = build_model_costs(&[]);
-        assert!(costs.is_empty());
-    }
-
-    #[test]
-    fn build_model_costs_calculates() {
-        let usage = vec![ModelTokenUsage {
-            model: "claude-sonnet-4-5-20251101".to_string(),
-            input_tokens: 1_000_000,
-            output_tokens: 1_000_000,
-        }];
-        let costs = build_model_costs(&usage);
-        assert_eq!(costs.len(), 1);
-        assert!((costs[0].cost - 18.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn pricing_data_serialize() {
-        let data = PricingData {
-            subscription: "max5x".to_string(),
-            subscription_price: 100.0,
-            billing_cycle: pricing::calculate_billing_cycle(1, 1700000000000),
-            period_usage: PeriodUsage::default(),
-            model_costs: vec![],
-            total_api_cost: 0.0,
-            projected_cost: 0.0,
-            break_even: pricing::calculate_break_even(100.0),
-            value_comparisons: vec![],
-        };
-        let json = serde_json::to_string(&data).unwrap();
-        assert!(json.contains("max5x"));
-    }
-
-    #[test]
     fn branch_with_pr_serialize() {
         let bwp = BranchWithPr {
             branch: BranchStats::default(),
@@ -573,17 +499,5 @@ mod tests {
         };
         assert_eq!(pr.number, 1);
         assert_eq!(pr.state, "MERGED");
-    }
-
-    #[test]
-    fn model_usage_with_cost_fields() {
-        let m = ModelUsageWithCost {
-            model: "claude-sonnet-4-5-20251101".to_string(),
-            input_tokens: 100,
-            output_tokens: 200,
-            cost: 0.005,
-        };
-        let json = serde_json::to_string(&m).unwrap();
-        assert!(json.contains("claude-sonnet"));
     }
 }

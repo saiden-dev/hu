@@ -9,7 +9,6 @@ pub fn all_tools() -> Vec<ToolDef> {
         data_search(),
         data_sessions(),
         data_errors(),
-        data_pricing(),
         data_tools(),
         read_file(),
     ]
@@ -89,27 +88,6 @@ fn data_errors() -> ToolDef {
     }
 }
 
-fn data_pricing() -> ToolDef {
-    ToolDef {
-        name: "data_pricing".to_string(),
-        description: "Compute API cost analysis vs subscription pricing".to_string(),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "subscription": {
-                    "type": "string",
-                    "description": "Subscription tier: max5x, max20x, or pro",
-                    "enum": ["max5x", "max20x", "pro"]
-                },
-                "billing_day": {
-                    "type": "integer",
-                    "description": "Day of month billing cycle starts (default: 1)"
-                }
-            }
-        }),
-    }
-}
-
 fn data_tools() -> ToolDef {
     ToolDef {
         name: "data_tools".to_string(),
@@ -170,7 +148,7 @@ fn read_file() -> ToolDef {
 
 /// Number of tools expected in the registry (for tests).
 #[cfg(test)]
-pub const EXPECTED_TOOL_COUNT: usize = 7;
+pub const EXPECTED_TOOL_COUNT: usize = 6;
 
 #[cfg(test)]
 mod tests {
@@ -255,15 +233,6 @@ mod tests {
         assert_eq!(tool.name, "data_errors");
         let props = &tool.input_schema["properties"];
         assert!(props.get("recent_days").is_some());
-    }
-
-    #[test]
-    fn data_pricing_schema() {
-        let tool = data_pricing();
-        assert_eq!(tool.name, "data_pricing");
-        let props = &tool.input_schema["properties"];
-        assert!(props.get("subscription").is_some());
-        assert!(props.get("billing_day").is_some());
     }
 
     #[test]

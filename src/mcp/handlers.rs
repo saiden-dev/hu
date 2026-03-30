@@ -23,7 +23,6 @@ async fn handle_tool_inner(name: &str, args: &serde_json::Value) -> Result<ToolR
         "data_search" => handle_data_search(args),
         "data_sessions" => handle_data_sessions(args),
         "data_errors" => handle_data_errors(args),
-        "data_pricing" => handle_data_pricing(args),
         "data_tools" => handle_data_tools(args),
         "read_file" => handle_read_file(args),
         _ => Ok(ToolResult::error(format!("Unknown tool: {name}"))),
@@ -82,23 +81,6 @@ fn handle_data_errors(args: &serde_json::Value) -> Result<ToolResult> {
     let cfg = data::service::get_config()?;
     let errors = data::service::scan_debug_errors(&cfg.claude_dir, recent_days)?;
     let json = serde_json::to_string_pretty(&errors)?;
-    Ok(ToolResult::text(json))
-}
-
-#[cfg(not(tarpaulin_include))]
-fn handle_data_pricing(args: &serde_json::Value) -> Result<ToolResult> {
-    let subscription = args
-        .get("subscription")
-        .and_then(|v| v.as_str())
-        .unwrap_or("max5x");
-    let billing_day = args
-        .get("billing_day")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let store = data::service::open_db()?;
-    data::service::ensure_synced(&store)?;
-    let pricing = data::service::compute_pricing(&store, subscription, billing_day)?;
-    let json = serde_json::to_string_pretty(&pricing)?;
     Ok(ToolResult::text(json))
 }
 

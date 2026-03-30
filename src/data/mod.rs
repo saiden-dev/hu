@@ -3,7 +3,6 @@ mod config;
 mod db;
 mod display;
 mod paths;
-mod pricing;
 mod queries;
 mod schema;
 pub mod service;
@@ -26,11 +25,6 @@ pub async fn run_command(cmd: DataCommand) -> Result<()> {
         DataCommand::Search { query, limit, json } => cmd_search(&query, limit, json),
         DataCommand::Tools { tool, json } => cmd_tools(tool.as_deref(), json),
         DataCommand::Errors { recent, json } => cmd_errors(recent, json),
-        DataCommand::Pricing {
-            subscription,
-            billing_day,
-            json,
-        } => cmd_pricing(&subscription, billing_day, json),
         DataCommand::Branches {
             branch,
             limit,
@@ -152,14 +146,6 @@ fn cmd_errors(recent_days: u32, json: bool) -> Result<()> {
     let cfg = service::get_config()?;
     let errors = service::scan_debug_errors(&cfg.claude_dir, recent_days)?;
     display::output_errors(&errors, &get_format(json))
-}
-
-#[cfg(not(tarpaulin_include))]
-fn cmd_pricing(subscription: &str, billing_day: u32, json: bool) -> Result<()> {
-    let store = service::open_db()?;
-    service::ensure_synced(&store)?;
-    let data = service::compute_pricing(&store, subscription, billing_day)?;
-    display::output_pricing(&data, &get_format(json))
 }
 
 #[cfg(not(tarpaulin_include))]

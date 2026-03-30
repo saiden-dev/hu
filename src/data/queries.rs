@@ -312,51 +312,6 @@ pub fn get_branch_stats(
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-pub fn get_period_usage(conn: &Connection, since: i64) -> Result<PeriodUsage> {
-    let row = conn.query_row(
-        "SELECT COUNT(*) as messages, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens FROM messages WHERE created_at >= ?1",
-        rusqlite::params![since],
-        |row| {
-            Ok(PeriodUsage {
-                messages: row.get(0)?,
-                input_tokens: row.get(1)?,
-                output_tokens: row.get(2)?,
-            })
-        },
-    )?;
-    Ok(row)
-}
-
-pub fn get_period_model_usage(conn: &Connection, since: i64) -> Result<Vec<ModelTokenUsage>> {
-    let mut stmt = conn.prepare(
-        "SELECT model, COALESCE(SUM(input_tokens), 0) as input_tokens, COALESCE(SUM(output_tokens), 0) as output_tokens FROM messages WHERE model IS NOT NULL AND created_at >= ?1 GROUP BY model",
-    )?;
-    let rows = stmt.query_map(rusqlite::params![since], |row| {
-        Ok(ModelTokenUsage {
-            model: row.get(0)?,
-            input_tokens: row.get(1)?,
-            output_tokens: row.get(2)?,
-        })
-    })?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
-}
-
-// Extra types used only by queries
-
-#[derive(Debug, Clone, Default, serde::Serialize)]
-pub struct PeriodUsage {
-    pub messages: i64,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-}
-
-#[derive(Debug, Clone, Default, serde::Serialize)]
-pub struct ModelTokenUsage {
-    pub model: String,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -661,48 +616,5 @@ mod tests {
         let store = open_test_db();
         let stats = get_branch_stats(&store.conn, None, 20).unwrap();
         assert!(stats.is_empty());
-    }
-
-    #[test]
-    fn get_period_usage_found() {
-        let store = open_test_db();
-        seed_data(&store.conn);
-        let usage = get_period_usage(&store.conn, 0).unwrap();
-        assert_eq!(usage.messages, 4);
-        assert!(usage.input_tokens > 0);
-    }
-
-    #[test]
-    fn get_period_usage_empty() {
-        let store = open_test_db();
-        let usage = get_period_usage(&store.conn, 0).unwrap();
-        assert_eq!(usage.messages, 0);
-    }
-
-    #[test]
-    fn get_period_model_usage_found() {
-        let store = open_test_db();
-        seed_data(&store.conn);
-        let usage = get_period_model_usage(&store.conn, 0).unwrap();
-        assert_eq!(usage.len(), 1);
-    }
-
-    #[test]
-    fn get_period_model_usage_empty() {
-        let store = open_test_db();
-        let usage = get_period_model_usage(&store.conn, 0).unwrap();
-        assert!(usage.is_empty());
-    }
-
-    #[test]
-    fn period_usage_default() {
-        let p = PeriodUsage::default();
-        assert_eq!(p.messages, 0);
-    }
-
-    #[test]
-    fn model_token_usage_default() {
-        let m = ModelTokenUsage::default();
-        assert_eq!(m.model, "");
     }
 }
