@@ -44,12 +44,15 @@ pub fn get_disk_usage(device: &str, mount_point: &str, fs_type: &str) -> Result<
         }
 
         let stat = stat.assume_init();
-        // Cast needed for cross-platform compatibility (types differ between macOS and Linux)
+        // Cast needed for cross-platform compatibility (statvfs fields are u32 on ARM, u64 on x86_64)
         #[allow(clippy::unnecessary_cast)]
         let block_size = stat.f_frsize as u64;
-        let total = stat.f_blocks * block_size;
-        let free = stat.f_bfree * block_size;
-        let available = stat.f_bavail * block_size;
+        #[allow(clippy::unnecessary_cast)]
+        let total = (stat.f_blocks as u64) * block_size;
+        #[allow(clippy::unnecessary_cast)]
+        let free = (stat.f_bfree as u64) * block_size;
+        #[allow(clippy::unnecessary_cast)]
+        let available = (stat.f_bavail as u64) * block_size;
         let used = total.saturating_sub(free);
 
         let use_percent = if total > 0 {
