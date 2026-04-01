@@ -97,7 +97,6 @@ Or in `.mcp.json`:
 | `data_search` | Search session messages |
 | `data_sessions` | List sessions |
 | `data_errors` | Scan debug log errors |
-| `data_pricing` | Token pricing analysis |
 | `data_tools` | Tool usage statistics |
 | `read_file` | Smart file reading (outline, interface, around) |
 
