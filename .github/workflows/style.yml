@@ -3,7 +3,6 @@ name: style
 on:
   push:
     branches: [master]
-    tags: ["v*"]
   pull_request:
 
 permissions:
