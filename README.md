@@ -120,4 +120,4 @@ just build    # build release
 
 ## License
 
-MIT
+[BSL-1.1](LICENSE)
