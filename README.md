@@ -21,8 +21,27 @@ See **[doc/savings.md](doc/savings.md)** for detailed token usage comparisons.
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install saiden-dev/tap/hu
+```
+
+### Shell (auto-detects platform)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/saiden-dev/hu/master/install.sh | sh
+```
+
+### Cargo
+
 ```bash
 cargo install hu
+```
+
+### Setup
+
+```bash
 hu install run  # Install hooks and slash commands to Claude Code
 ```
 

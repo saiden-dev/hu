@@ -171,3 +171,80 @@ jobs:
         run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  update-homebrew:
+    name: update-homebrew
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets and compute checksums
+        id: checksums
+        run: |
+          for asset in hu-macos-arm64 hu-linux-amd64 hu-linux-arm64; do
+            curl -fsSL "https://github.com/saiden-dev/hu/releases/download/${GITHUB_REF_NAME}/${asset}" -o "${asset}"
+            sha=$(sha256sum "${asset}" | cut -d' ' -f1)
+            key=$(echo "${asset}" | tr '-' '_')
+            echo "${key}=${sha}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Update Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA_MACOS="${{ steps.checksums.outputs.hu_macos_arm64 }}"
+          SHA_LINUX_AMD="${{ steps.checksums.outputs.hu_linux_amd64 }}"
+          SHA_LINUX_ARM="${{ steps.checksums.outputs.hu_linux_arm64 }}"
+
+          cat > /tmp/hu.rb <<EOF
+          class Hu < Formula
+            desc "Token-efficient dev workflow CLI for Claude Code"
+            homepage "https://github.com/saiden-dev/hu"
+            version "${VERSION}"
+            license "BUSL-1.1"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/saiden-dev/hu/releases/download/v#{version}/hu-macos-arm64"
+                sha256 "${SHA_MACOS}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/saiden-dev/hu/releases/download/v#{version}/hu-linux-arm64"
+                sha256 "${SHA_LINUX_ARM}"
+              end
+
+              on_intel do
+                url "https://github.com/saiden-dev/hu/releases/download/v#{version}/hu-linux-amd64"
+                sha256 "${SHA_LINUX_AMD}"
+              end
+            end
+
+            def install
+              binary = Dir["hu-*"].first || "hu"
+              bin.install binary => "hu"
+            end
+
+            test do
+              assert_match "hu", shell_output("#{bin}/hu --help")
+            end
+          end
+          EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' /tmp/hu.rb
+
+          CONTENT=$(base64 -w0 /tmp/hu.rb)
+          SHA=$(gh api repos/saiden-dev/homebrew-tap/contents/Formula/hu.rb --jq '.sha')
+
+          gh api repos/saiden-dev/homebrew-tap/contents/Formula/hu.rb \
+            -X PUT \
+            -f message="Update hu to ${VERSION}" \
+            -f content="${CONTENT}" \
+            -f sha="${SHA}"
