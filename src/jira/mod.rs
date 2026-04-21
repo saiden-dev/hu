@@ -20,6 +20,7 @@ mod search;
 mod service;
 mod show;
 mod sprint;
+mod sprints;
 mod tickets;
 mod types;
 mod update;
@@ -38,6 +39,7 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
         JiraCommand::Auth => auth_handler::run().await,
         JiraCommand::Tickets => tickets::run().await,
         JiraCommand::Sprint => sprint::run(sprint::SprintArgs::default()).await,
+        JiraCommand::Sprints { state } => sprints::run(&state).await,
         JiraCommand::Search { query } => search::run(&query).await,
         JiraCommand::Show { key } => show::run(&key).await,
         JiraCommand::Update {
@@ -45,12 +47,14 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
             summary,
             status,
             assign,
+            body,
         } => {
             update::run(UpdateArgs {
                 key,
                 summary,
                 status,
                 assign,
+                body,
             })
             .await
         }
@@ -120,6 +124,7 @@ mod tests {
             summary: None,
             status: None,
             assign: None,
+            body: None,
         };
         assert_eq!(args.key, "X-1");
     }

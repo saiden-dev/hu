@@ -13,6 +13,7 @@ pub struct UpdateArgs {
     pub summary: Option<String>,
     pub status: Option<String>,
     pub assign: Option<String>,
+    pub body: Option<String>,
 }
 
 /// Run the jira update command
@@ -29,7 +30,8 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
     let mut changes_made = false;
 
     // Handle field updates
-    let has_field_updates = args.summary.is_some() || args.assign.is_some();
+    let has_field_updates =
+        args.summary.is_some() || args.assign.is_some() || args.body.is_some();
     if has_field_updates {
         let assignee = match &args.assign {
             Some(a) if a == "me" => {
@@ -42,7 +44,7 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
 
         let update = IssueUpdate {
             summary: args.summary.clone(),
-            description: None,
+            description: args.body.clone(),
             assignee,
         };
 
@@ -54,6 +56,9 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
                 "\x1b[32m\u{2713}\x1b[0m Updated summary: \"{}\"\n",
                 summary
             ));
+        }
+        if args.body.is_some() {
+            output.push_str("\x1b[32m\u{2713}\x1b[0m Updated description\n");
         }
         if args.assign.is_some() {
             output.push_str("\x1b[32m\u{2713}\x1b[0m Updated assignee\n");
@@ -75,7 +80,7 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
     }
 
     if !changes_made {
-        bail!("No changes specified. Use --summary, --status, or --assign.");
+        bail!("No changes specified. Use --summary, --body, --status, or --assign.");
     }
 
     Ok(output)

@@ -8,6 +8,7 @@ fn update_args_debug() {
         summary: Some("New".to_string()),
         status: None,
         assign: None,
+        body: None,
     };
     let debug_str = format!("{:?}", args);
     assert!(debug_str.contains("UpdateArgs"));
@@ -20,6 +21,7 @@ fn update_args_clone() {
         summary: Some("S".to_string()),
         status: Some("Done".to_string()),
         assign: Some("user".to_string()),
+        body: Some("B".to_string()),
     };
     let cloned = args.clone();
     assert_eq!(cloned.key, args.key);
@@ -163,6 +165,7 @@ async fn process_update_changes_summary() {
         summary: Some("New summary".to_string()),
         status: None,
         assign: None,
+        body: None,
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -195,6 +198,7 @@ async fn process_update_assigns_to_me() {
         summary: None,
         status: None,
         assign: Some("me".to_string()),
+        body: None,
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -225,6 +229,7 @@ async fn process_update_assigns_to_user() {
         summary: None,
         status: None,
         assign: Some("other-user-123".to_string()),
+        body: None,
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -268,6 +273,7 @@ async fn process_update_transitions_status() {
         summary: None,
         status: Some("Done".to_string()),
         assign: None,
+        body: None,
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -295,6 +301,7 @@ async fn process_update_fails_no_changes() {
         summary: None,
         status: None,
         assign: None,
+        body: None,
     };
 
     let result = process_update(&client, &args).await;
@@ -326,6 +333,7 @@ async fn process_update_multiple_changes() {
         summary: Some("Updated".to_string()),
         status: Some("Done".to_string()),
         assign: Some("me".to_string()),
+        body: None,
     };
 
     let output = process_update(&client, &args).await.unwrap();

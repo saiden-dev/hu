@@ -11,6 +11,13 @@ pub enum JiraCommand {
     /// Show all issues in current sprint
     Sprint,
 
+    /// List sprints (active, future, closed)
+    Sprints {
+        /// Filter: active (default), future, closed, all
+        #[arg(default_value = "active")]
+        state: String,
+    },
+
     /// Search tickets using JQL
     Search {
         /// JQL query (e.g., "project = PROJ AND status = 'In Progress'")
@@ -39,6 +46,10 @@ pub enum JiraCommand {
         /// Assign to user (account ID or "me")
         #[arg(long)]
         assign: Option<String>,
+
+        /// New description/body text
+        #[arg(long, alias = "description")]
+        body: Option<String>,
     },
 }
 
@@ -198,6 +209,7 @@ mod tests {
             summary: Some("S".to_string()),
             status: None,
             assign: None,
+            body: None,
         };
         let debug_str = format!("{:?}", cmd);
         assert!(debug_str.contains("Update"));

@@ -20,6 +20,19 @@ pub struct Issue {
     pub updated: String,
 }
 
+/// Jira sprint (from Agile API)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sprint {
+    pub id: i64,
+    pub name: String,
+    pub state: String,
+    #[serde(rename = "startDate")]
+    pub start_date: Option<String>,
+    #[serde(rename = "endDate")]
+    pub end_date: Option<String>,
+    pub goal: Option<String>,
+}
+
 /// Fields to update on an issue
 #[derive(Debug, Clone, Default)]
 pub struct IssueUpdate {

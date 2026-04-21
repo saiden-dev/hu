@@ -64,6 +64,45 @@ impl JiraClient {
             self.cloud_id, path
         )
     }
+
+    /// List all Jira fields (to discover custom field IDs).
+    pub async fn list_fields(&self) -> Result<Vec<serde_json::Value>> {
+        let url = self.api_url("/field");
+        let response = self.client.get(&url)
+            .bearer_auth(&self.access_token)
+            .send().await
+            .context("Failed to list fields")?;
+        if !response.status().is_success() {
+            let err = response.text().await.unwrap_or_default();
+            bail!("Failed to list fields: {err}");
+        }
+        let json: serde_json::Value = response.json().await?;
+        Ok(json.as_array().cloned().unwrap_or_default())
+    }
+
+    /// Raw search returning the full JSON response (for custom fields).
+    pub async fn search_raw(
+        &self,
+        jql: &str,
+        fields: &[&str],
+        max_results: usize,
+    ) -> Result<serde_json::Value> {
+        let url = self.api_url("/search/jql");
+        let response = self.client.post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({
+                "jql": jql,
+                "fields": fields,
+                "maxResults": max_results,
+            }))
+            .send().await
+            .context("Failed to search")?;
+        if !response.status().is_success() {
+            let err = response.text().await.unwrap_or_default();
+            bail!("Search failed: {err}");
+        }
+        Ok(response.json().await?)
+    }
 }
 
 impl JiraApi for JiraClient {
