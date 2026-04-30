@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(output, "  Only one line\n");
     }
 
-    use super::super::types::{IssueUpdate, Transition, User};
+    use super::super::types::{Comment, IssueUpdate, Transition, User};
 
     // Mock client for testing process_show
     struct MockJiraClient {
@@ -236,6 +236,10 @@ mod tests {
         }
 
         async fn transition_issue(&self, _key: &str, _transition_id: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
             unimplemented!()
         }
     }

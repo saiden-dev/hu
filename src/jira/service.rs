@@ -45,6 +45,7 @@ pub async fn create_client() -> Result<JiraClient> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::Comment;
     use super::*;
 
     struct MockApi {
@@ -107,6 +108,10 @@ mod tests {
 
         async fn transition_issue(&self, _key: &str, _transition_id: &str) -> Result<()> {
             Ok(())
+        }
+
+        async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
+            Ok(vec![])
         }
     }
 

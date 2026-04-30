@@ -2,20 +2,23 @@
 
 ## Active: Jira ADF + Comments + Create (see PLAN.md)
 
-### Phase 1 — Client split (refactor)
-- [ ] 1.1 Extract `issues.rs` (get_issue, search_issues, update_issue, parse_user, parse_issues)
-- [ ] 1.2 Extract `transitions.rs` (get_transitions, transition_issue, parse_transitions)
-- [ ] 1.3 Slim `client/mod.rs` to trait + struct + new() + api_url()
-- [ ] 1.4 Verify `just check && just test && cargo tarpaulin` all green
+### Phase 1 — Client split (refactor) ✅
+- [x] 1.1 Extract `issues.rs` (get_issue, search_issues, update_issue, parse_user, parse_issues)
+- [x] 1.2 Extract `transitions.rs` (get_transitions, transition_issue, parse_transitions)
+- [x] 1.3 Slim `client/mod.rs` to trait + struct + new() + api_url()
+- [x] 1.4 Verify `just check && just test` green (tarpaulin not exercised here)
 
-### Phase 2 — ADF module + Markdown-by-default body
-- [ ] 2.1 Add `pulldown-cmark = "0.12"` to Cargo.toml
-- [ ] 2.2 Create `src/jira/adf.rs` with `markdown_to_adf` + relocated `adf_to_plain_text`
-- [ ] 2.3 Golden fixtures under `tests/fixtures/adf/` (heading, bold, list, nested list, code block, link, blockquote, hr, hardbreak)
-- [ ] 2.4 Wire `markdown_to_adf` into `update_issue` (replaces inline ADF)
-- [ ] 2.5 Add `--body-adf <PATH>` flag (mutex with `--body`)
-- [ ] 2.6 Smoke test on Marketer instance — verify markdown headers, bold, lists render
-- [ ] 2.7 Release-notes blurb for v0.2.0 breaking change
+### Cleanup ✅
+- [x] cargo fmt + clippy fixes across crate (pre-existing tech debt)
+
+### Phase 2 — ADF module + Markdown-by-default body ✅
+- [x] 2.1 Add `pulldown-cmark = "0.12"` to Cargo.toml
+- [x] 2.2 Create `src/jira/adf.rs` with `markdown_to_adf` + relocated `adf_to_plain_text` (22 inline tests instead of fs fixtures)
+- [x] 2.3 Golden coverage via inline tests (deviation: skipped tests/fixtures/adf/ in favor of inline goldens — lower friction, same coverage)
+- [x] 2.4 Wire `markdown_to_adf` into `update_issue` (replaces inline ADF)
+- [x] 2.5 Add `--body-adf <PATH>` flag (mutex with `--body`)
+- [ ] 2.6 Smoke test on Marketer instance — verify markdown headers, bold, lists render (manual; pending)
+- [ ] 2.7 Release-notes blurb for v0.2.0 breaking change (deferred to wrap-up)
 
 ### Phase 3 — Read comments
 - [ ] 3.1 Add `Comment` type in `types.rs`

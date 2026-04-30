@@ -82,7 +82,7 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::{IssueUpdate, Transition, User};
+    use super::super::types::{Comment, IssueUpdate, Transition, User};
     use super::*;
 
     #[test]
@@ -247,6 +247,10 @@ mod tests {
         }
 
         async fn transition_issue(&self, _key: &str, _transition_id: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
             unimplemented!()
         }
     }

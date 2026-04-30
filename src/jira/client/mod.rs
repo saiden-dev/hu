@@ -10,8 +10,9 @@ use anyhow::{bail, Context, Result};
 use std::future::Future;
 
 use super::auth;
-use super::types::{Issue, IssueUpdate, Transition, User};
+use super::types::{Comment, Issue, IssueUpdate, Transition, User};
 
+mod comments;
 mod issues;
 mod transitions;
 
@@ -45,6 +46,11 @@ pub trait JiraApi: Send + Sync {
         key: &str,
         transition_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
+
+    /// List all comments on an issue, ordered as Jira returns them
+    /// (oldest first).
+    #[allow(dead_code)] // handler lands in chunk 3.B
+    fn list_comments(&self, key: &str) -> impl Future<Output = Result<Vec<Comment>>> + Send;
 }
 
 /// Jira API client.
@@ -148,5 +154,9 @@ impl JiraApi for JiraClient {
 
     async fn transition_issue(&self, key: &str, transition_id: &str) -> Result<()> {
         transitions::transition_issue(self, key, transition_id).await
+    }
+
+    async fn list_comments(&self, key: &str) -> Result<Vec<Comment>> {
+        comments::list_comments(self, key).await
     }
 }

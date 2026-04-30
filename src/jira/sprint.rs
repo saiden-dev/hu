@@ -204,7 +204,7 @@ mod tests {
         assert!(other_output.contains("\x1b[34m")); // blue
     }
 
-    use super::super::types::{IssueUpdate, Transition, User};
+    use super::super::types::{Comment, IssueUpdate, Transition, User};
 
     // Mock client for testing process_sprint
     struct MockJiraClient {
@@ -233,6 +233,10 @@ mod tests {
         }
 
         async fn transition_issue(&self, _key: &str, _transition_id: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
             unimplemented!()
         }
     }

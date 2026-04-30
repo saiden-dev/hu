@@ -56,6 +56,22 @@ pub struct Transition {
     pub name: String,
 }
 
+/// A single comment on a Jira issue.
+///
+/// `body` is the plain-text rendering used for table output;
+/// `body_adf` is the raw ADF document preserved for JSON output and
+/// any future full-fidelity rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // first caller lands in chunk 3.B (handler + CLI)
+pub struct Comment {
+    pub id: String,
+    pub author: User,
+    pub body: String,
+    pub body_adf: serde_json::Value,
+    pub created: String,
+    pub updated: String,
+}
+
 /// OAuth configuration for Jira
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthConfig {

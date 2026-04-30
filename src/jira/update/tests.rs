@@ -205,6 +205,10 @@ impl JiraApi for MockJiraClient {
         *self.transitioned_to.lock().unwrap() = Some(transition_id.to_string());
         Ok(())
     }
+
+    async fn list_comments(&self, _key: &str) -> Result<Vec<super::super::types::Comment>> {
+        unimplemented!()
+    }
 }
 
 fn make_mock(user_account_id: &str, transitions: Vec<Transition>) -> MockJiraClient {
