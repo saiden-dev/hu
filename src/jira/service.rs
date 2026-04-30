@@ -45,7 +45,7 @@ pub async fn create_client() -> Result<JiraClient> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::types::Comment;
+    use super::super::types::{Comment, CreatedIssue, IssueCreate, IssueType};
     use super::*;
 
     struct MockApi {
@@ -111,6 +111,18 @@ mod tests {
         }
 
         async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
+            Ok(vec![])
+        }
+
+        async fn create_issue(&self, _new: &IssueCreate) -> Result<CreatedIssue> {
+            Ok(CreatedIssue {
+                id: "0".to_string(),
+                key: "MOCK-0".to_string(),
+                url: "https://example.atlassian.net/browse/MOCK-0".to_string(),
+            })
+        }
+
+        async fn get_issue_types(&self, _project_key: &str) -> Result<Vec<IssueType>> {
             Ok(vec![])
         }
     }

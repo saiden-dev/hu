@@ -56,6 +56,41 @@ pub struct Transition {
     pub name: String,
 }
 
+/// Fields needed to create a new issue.
+///
+/// `description` is interpreted as Markdown; `description_adf` is raw ADF
+/// passthrough. Same precedence as [`IssueUpdate`]: ADF wins when both
+/// are set.
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // first caller lands in chunk 4.B (handler + CLI)
+pub struct IssueCreate {
+    pub project_key: String,
+    pub summary: String,
+    pub issue_type: String,
+    pub description: Option<String>,
+    pub description_adf: Option<serde_json::Value>,
+    pub assignee: Option<String>,
+}
+
+/// One issue type as advertised by `GET /issue/createmeta/{key}/issuetypes`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // first caller lands in chunk 4.B
+pub struct IssueType {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+/// Result of [`JiraApi::create_issue`]. `url` is the human-facing
+/// browse URL for the new issue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // first caller lands in chunk 4.B
+pub struct CreatedIssue {
+    pub id: String,
+    pub key: String,
+    pub url: String,
+}
+
 /// A single comment on a Jira issue.
 ///
 /// `body` is the plain-text rendering used for table output;

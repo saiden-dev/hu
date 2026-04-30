@@ -10,9 +10,12 @@ use anyhow::{bail, Context, Result};
 use std::future::Future;
 
 use super::auth;
-use super::types::{Comment, Issue, IssueUpdate, Transition, User};
+use super::types::{
+    Comment, CreatedIssue, Issue, IssueCreate, IssueType, IssueUpdate, Transition, User,
+};
 
 mod comments;
+mod create;
 mod issues;
 mod transitions;
 
@@ -50,6 +53,18 @@ pub trait JiraApi: Send + Sync {
     /// List all comments on an issue, ordered as Jira returns them
     /// (oldest first).
     fn list_comments(&self, key: &str) -> impl Future<Output = Result<Vec<Comment>>> + Send;
+
+    /// Create a new issue. Returns the new key + browse URL.
+    #[allow(dead_code)] // handler lands in chunk 4.B
+    fn create_issue(&self, new: &IssueCreate) -> impl Future<Output = Result<CreatedIssue>> + Send;
+
+    /// List the issue types available on a given project. Used to
+    /// validate `--type` against what the project actually supports.
+    #[allow(dead_code)] // handler lands in chunk 4.B
+    fn get_issue_types(
+        &self,
+        project_key: &str,
+    ) -> impl Future<Output = Result<Vec<IssueType>>> + Send;
 }
 
 /// Jira API client.
@@ -60,6 +75,9 @@ pub struct JiraClient {
     pub(super) cloud_id: String,
     /// OAuth access token (refreshed on `new()`).
     pub(super) access_token: String,
+    /// Browse-URL base, e.g. `https://acme.atlassian.net`. Used to build
+    /// human-facing links after a successful issue creation.
+    pub(super) site_url: String,
 }
 
 impl JiraClient {
@@ -73,6 +91,7 @@ impl JiraClient {
             http: reqwest::Client::new(),
             cloud_id: creds.cloud_id,
             access_token,
+            site_url: creds.site_url,
         })
     }
 
@@ -157,5 +176,13 @@ impl JiraApi for JiraClient {
 
     async fn list_comments(&self, key: &str) -> Result<Vec<Comment>> {
         comments::list_comments(self, key).await
+    }
+
+    async fn create_issue(&self, new: &IssueCreate) -> Result<CreatedIssue> {
+        create::create_issue(self, new).await
+    }
+
+    async fn get_issue_types(&self, project_key: &str) -> Result<Vec<IssueType>> {
+        create::get_issue_types(self, project_key).await
     }
 }

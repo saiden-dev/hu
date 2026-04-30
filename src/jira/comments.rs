@@ -302,6 +302,20 @@ mod tests {
         async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
             Ok(self.comments.clone())
         }
+
+        async fn create_issue(
+            &self,
+            _new: &super::super::types::IssueCreate,
+        ) -> Result<super::super::types::CreatedIssue> {
+            unimplemented!()
+        }
+
+        async fn get_issue_types(
+            &self,
+            _project_key: &str,
+        ) -> Result<Vec<super::super::types::IssueType>> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]

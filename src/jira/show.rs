@@ -207,7 +207,9 @@ mod tests {
         assert_eq!(output, "  Only one line\n");
     }
 
-    use super::super::types::{Comment, IssueUpdate, Transition, User};
+    use super::super::types::{
+        Comment, CreatedIssue, IssueCreate, IssueType, IssueUpdate, Transition, User,
+    };
 
     // Mock client for testing process_show
     struct MockJiraClient {
@@ -240,6 +242,14 @@ mod tests {
         }
 
         async fn list_comments(&self, _key: &str) -> Result<Vec<Comment>> {
+            unimplemented!()
+        }
+
+        async fn create_issue(&self, _new: &IssueCreate) -> Result<CreatedIssue> {
+            unimplemented!()
+        }
+
+        async fn get_issue_types(&self, _project_key: &str) -> Result<Vec<IssueType>> {
             unimplemented!()
         }
     }
