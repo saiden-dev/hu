@@ -1,4 +1,9 @@
-use super::*;
+use super::issues::{
+    build_update_body, extract_description, extract_text_from_adf_node, parse_issues,
+    parse_single_issue, parse_user,
+};
+use super::transitions::parse_transitions;
+use crate::jira::types::IssueUpdate;
 use serde_json::json;
 
 #[test]
