@@ -49,6 +49,7 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
             status,
             assign,
             body,
+            body_adf,
         } => {
             update::run(UpdateArgs {
                 key,
@@ -56,6 +57,7 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
                 status,
                 assign,
                 body,
+                body_adf,
             })
             .await
         }
@@ -126,6 +128,7 @@ mod tests {
             status: None,
             assign: None,
             body: None,
+            body_adf: None,
         };
         assert_eq!(args.key, "X-1");
     }

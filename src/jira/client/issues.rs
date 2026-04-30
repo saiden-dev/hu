@@ -167,12 +167,13 @@ pub fn build_update_body(update: &IssueUpdate) -> serde_json::Value {
     if let Some(summary) = &update.summary {
         fields.insert("summary".to_string(), serde_json::json!(summary));
     }
-    if let Some(description) = &update.description {
-        // Jira description is rich-text only (ADF). We treat the input
-        // as Markdown so headings, lists, code, etc. round-trip into
-        // the new editor on atlassian.net. Plain prose without any
-        // markup characters renders as a single paragraph identical
-        // to the previous behaviour.
+    // Raw ADF takes precedence — escape hatch for callers who already
+    // have a fully-formed document (mention nodes, panels, custom
+    // attrs, etc.). Falls back to the Markdown path which renders
+    // plain prose as a single paragraph just like the legacy code.
+    if let Some(adf_doc) = &update.description_adf {
+        fields.insert("description".to_string(), adf_doc.clone());
+    } else if let Some(description) = &update.description {
         fields.insert("description".to_string(), adf::markdown_to_adf(description));
     }
     if let Some(assignee) = &update.assignee {

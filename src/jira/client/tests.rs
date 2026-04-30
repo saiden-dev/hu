@@ -225,6 +225,7 @@ fn build_update_body_with_summary() {
     let update = IssueUpdate {
         summary: Some("New summary".to_string()),
         description: None,
+        description_adf: None,
         assignee: None,
     };
     let body = build_update_body(&update);
@@ -236,6 +237,7 @@ fn build_update_body_with_description() {
     let update = IssueUpdate {
         summary: None,
         description: Some("New description".to_string()),
+        description_adf: None,
         assignee: None,
     };
     let body = build_update_body(&update);
@@ -251,6 +253,7 @@ fn build_update_body_parses_description_as_markdown() {
     let update = IssueUpdate {
         summary: None,
         description: Some("# Heading\n\n**bold** in body".to_string()),
+        description_adf: None,
         assignee: None,
     };
     let body = build_update_body(&update);
@@ -266,6 +269,7 @@ fn build_update_body_with_assignee() {
     let update = IssueUpdate {
         summary: None,
         description: None,
+        description_adf: None,
         assignee: Some("user123".to_string()),
     };
     let body = build_update_body(&update);
@@ -277,6 +281,7 @@ fn build_update_body_with_all_fields() {
     let update = IssueUpdate {
         summary: Some("Sum".to_string()),
         description: Some("Desc".to_string()),
+        description_adf: None,
         assignee: Some("user".to_string()),
     };
     let body = build_update_body(&update);

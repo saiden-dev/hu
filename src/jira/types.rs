@@ -34,11 +34,18 @@ pub struct Sprint {
     pub goal: Option<String>,
 }
 
-/// Fields to update on an issue
+/// Fields to update on an issue.
+///
+/// `description` is interpreted as Markdown and converted to ADF before
+/// upload (the modern atlassian.net editor only accepts ADF). For raw
+/// passthrough — e.g. cross-tool ADF generation, mention nodes, panels
+/// — set `description_adf` to a pre-built ADF document instead. When
+/// both are set, `description_adf` wins.
 #[derive(Debug, Clone, Default)]
 pub struct IssueUpdate {
     pub summary: Option<String>,
     pub description: Option<String>,
+    pub description_adf: Option<serde_json::Value>,
     pub assignee: Option<String>,
 }
 
@@ -215,6 +222,7 @@ mod tests {
         let update = IssueUpdate {
             summary: Some("New summary".to_string()),
             description: Some("New desc".to_string()),
+            description_adf: None,
             assignee: Some("user123".to_string()),
         };
         let cloned = update.clone();
@@ -235,6 +243,7 @@ mod tests {
         let update = IssueUpdate {
             summary: Some("Only summary".to_string()),
             description: None,
+            description_adf: None,
             assignee: None,
         };
         assert!(update.summary.is_some());

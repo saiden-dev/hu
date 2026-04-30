@@ -1,14 +1,27 @@
+use std::io::Write;
+
+use serde_json::json;
+use tempfile::NamedTempFile;
+
 use super::super::types::User;
 use super::*;
+
+fn empty_args(key: &str) -> UpdateArgs {
+    UpdateArgs {
+        key: key.to_string(),
+        summary: None,
+        status: None,
+        assign: None,
+        body: None,
+        body_adf: None,
+    }
+}
 
 #[test]
 fn update_args_debug() {
     let args = UpdateArgs {
-        key: "X-1".to_string(),
         summary: Some("New".to_string()),
-        status: None,
-        assign: None,
-        body: None,
+        ..empty_args("X-1")
     };
     let debug_str = format!("{:?}", args);
     assert!(debug_str.contains("UpdateArgs"));
@@ -17,11 +30,11 @@ fn update_args_debug() {
 #[test]
 fn update_args_clone() {
     let args = UpdateArgs {
-        key: "X-1".to_string(),
         summary: Some("S".to_string()),
         status: Some("Done".to_string()),
         assign: Some("user".to_string()),
         body: Some("B".to_string()),
+        ..empty_args("X-1")
     };
     let cloned = args.clone();
     assert_eq!(cloned.key, args.key);
@@ -111,6 +124,53 @@ fn find_transition_empty_list() {
     assert!(result.is_err());
 }
 
+#[test]
+fn load_adf_accepts_well_formed_doc() {
+    let mut file = NamedTempFile::new().unwrap();
+    let doc = json!({
+        "type": "doc",
+        "version": 1,
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}]
+    });
+    file.write_all(doc.to_string().as_bytes()).unwrap();
+    let loaded = load_adf(file.path()).unwrap();
+    assert_eq!(loaded["type"], "doc");
+    assert_eq!(loaded["content"][0]["type"], "paragraph");
+}
+
+#[test]
+fn load_adf_rejects_missing_doc_type() {
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(br#"{"type": "paragraph", "content": []}"#)
+        .unwrap();
+    let err = load_adf(file.path()).unwrap_err().to_string();
+    assert!(err.contains("\"type\": \"doc\""));
+}
+
+#[test]
+fn load_adf_rejects_missing_content_array() {
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(br#"{"type": "doc", "version": 1}"#).unwrap();
+    let err = load_adf(file.path()).unwrap_err().to_string();
+    assert!(err.contains("content"));
+}
+
+#[test]
+fn load_adf_rejects_invalid_json() {
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(b"not json").unwrap();
+    let err = load_adf(file.path()).unwrap_err().to_string();
+    assert!(err.contains("Invalid JSON"));
+}
+
+#[test]
+fn load_adf_rejects_missing_file() {
+    let err = load_adf(std::path::Path::new("/nonexistent/path/no.json"))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Failed to read"));
+}
+
 // Mock client for testing process_update
 struct MockJiraClient {
     user: User,
@@ -147,25 +207,26 @@ impl JiraApi for MockJiraClient {
     }
 }
 
-#[tokio::test]
-async fn process_update_changes_summary() {
-    let client = MockJiraClient {
+fn make_mock(user_account_id: &str, transitions: Vec<Transition>) -> MockJiraClient {
+    MockJiraClient {
         user: User {
-            account_id: "me123".to_string(),
+            account_id: user_account_id.to_string(),
             display_name: "Me".to_string(),
             email_address: None,
         },
-        transitions: vec![],
+        transitions,
         updated_fields: std::sync::Mutex::new(None),
         transitioned_to: std::sync::Mutex::new(None),
-    };
+    }
+}
+
+#[tokio::test]
+async fn process_update_changes_summary() {
+    let client = make_mock("me123", vec![]);
 
     let args = UpdateArgs {
-        key: "X-1".to_string(),
         summary: Some("New summary".to_string()),
-        status: None,
-        assign: None,
-        body: None,
+        ..empty_args("X-1")
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -182,23 +243,11 @@ async fn process_update_changes_summary() {
 
 #[tokio::test]
 async fn process_update_assigns_to_me() {
-    let client = MockJiraClient {
-        user: User {
-            account_id: "my-account-id".to_string(),
-            display_name: "Me".to_string(),
-            email_address: None,
-        },
-        transitions: vec![],
-        updated_fields: std::sync::Mutex::new(None),
-        transitioned_to: std::sync::Mutex::new(None),
-    };
+    let client = make_mock("my-account-id", vec![]);
 
     let args = UpdateArgs {
-        key: "X-1".to_string(),
-        summary: None,
-        status: None,
         assign: Some("me".to_string()),
-        body: None,
+        ..empty_args("X-1")
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -213,23 +262,11 @@ async fn process_update_assigns_to_me() {
 
 #[tokio::test]
 async fn process_update_assigns_to_user() {
-    let client = MockJiraClient {
-        user: User {
-            account_id: "me".to_string(),
-            display_name: "Me".to_string(),
-            email_address: None,
-        },
-        transitions: vec![],
-        updated_fields: std::sync::Mutex::new(None),
-        transitioned_to: std::sync::Mutex::new(None),
-    };
+    let client = make_mock("me", vec![]);
 
     let args = UpdateArgs {
-        key: "X-1".to_string(),
-        summary: None,
-        status: None,
         assign: Some("other-user-123".to_string()),
-        body: None,
+        ..empty_args("X-1")
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -244,13 +281,9 @@ async fn process_update_assigns_to_user() {
 
 #[tokio::test]
 async fn process_update_transitions_status() {
-    let client = MockJiraClient {
-        user: User {
-            account_id: "me".to_string(),
-            display_name: "Me".to_string(),
-            email_address: None,
-        },
-        transitions: vec![
+    let client = make_mock(
+        "me",
+        vec![
             Transition {
                 id: "11".to_string(),
                 name: "To Do".to_string(),
@@ -264,16 +297,11 @@ async fn process_update_transitions_status() {
                 name: "Done".to_string(),
             },
         ],
-        updated_fields: std::sync::Mutex::new(None),
-        transitioned_to: std::sync::Mutex::new(None),
-    };
+    );
 
     let args = UpdateArgs {
-        key: "X-1".to_string(),
-        summary: None,
         status: Some("Done".to_string()),
-        assign: None,
-        body: None,
+        ..empty_args("X-1")
     };
 
     let output = process_update(&client, &args).await.unwrap();
@@ -285,24 +313,8 @@ async fn process_update_transitions_status() {
 
 #[tokio::test]
 async fn process_update_fails_no_changes() {
-    let client = MockJiraClient {
-        user: User {
-            account_id: "me".to_string(),
-            display_name: "Me".to_string(),
-            email_address: None,
-        },
-        transitions: vec![],
-        updated_fields: std::sync::Mutex::new(None),
-        transitioned_to: std::sync::Mutex::new(None),
-    };
-
-    let args = UpdateArgs {
-        key: "X-1".to_string(),
-        summary: None,
-        status: None,
-        assign: None,
-        body: None,
-    };
+    let client = make_mock("me", vec![]);
+    let args = empty_args("X-1");
 
     let result = process_update(&client, &args).await;
     assert!(result.is_err());
@@ -314,30 +326,67 @@ async fn process_update_fails_no_changes() {
 
 #[tokio::test]
 async fn process_update_multiple_changes() {
-    let client = MockJiraClient {
-        user: User {
-            account_id: "me123".to_string(),
-            display_name: "Me".to_string(),
-            email_address: None,
-        },
-        transitions: vec![Transition {
+    let client = make_mock(
+        "me123",
+        vec![Transition {
             id: "31".to_string(),
             name: "Done".to_string(),
         }],
-        updated_fields: std::sync::Mutex::new(None),
-        transitioned_to: std::sync::Mutex::new(None),
-    };
+    );
 
     let args = UpdateArgs {
-        key: "X-1".to_string(),
         summary: Some("Updated".to_string()),
         status: Some("Done".to_string()),
         assign: Some("me".to_string()),
-        body: None,
+        ..empty_args("X-1")
     };
 
     let output = process_update(&client, &args).await.unwrap();
     assert!(output.contains("Updated summary"));
     assert!(output.contains("Updated assignee"));
     assert!(output.contains("Transitioned to: Done"));
+}
+
+#[tokio::test]
+async fn process_update_body_adf_passes_through() {
+    let client = make_mock("me", vec![]);
+
+    let mut file = NamedTempFile::new().unwrap();
+    let doc = json!({
+        "type": "doc",
+        "version": 1,
+        "content": [{
+            "type": "paragraph",
+            "content": [{"type": "text", "text": "raw"}]
+        }]
+    });
+    file.write_all(doc.to_string().as_bytes()).unwrap();
+
+    let args = UpdateArgs {
+        body_adf: Some(file.path().to_path_buf()),
+        ..empty_args("X-1")
+    };
+
+    let output = process_update(&client, &args).await.unwrap();
+    assert!(output.contains("Updated description (raw ADF)"));
+
+    let updated = client.updated_fields.lock().unwrap();
+    let captured = updated.as_ref().unwrap().description_adf.as_ref().unwrap();
+    assert_eq!(captured["type"], "doc");
+    assert_eq!(captured["content"][0]["content"][0]["text"], "raw");
+}
+
+#[tokio::test]
+async fn process_update_body_adf_missing_file_fails_before_network() {
+    let client = make_mock("me", vec![]);
+
+    let args = UpdateArgs {
+        body_adf: Some(std::path::PathBuf::from("/nonexistent/adf.json")),
+        ..empty_args("X-1")
+    };
+
+    let result = process_update(&client, &args).await;
+    assert!(result.is_err());
+    // Mock should not have been touched.
+    assert!(client.updated_fields.lock().unwrap().is_none());
 }

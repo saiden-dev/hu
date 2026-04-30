@@ -1,4 +1,6 @@
-use anyhow::{bail, Result};
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
 
 use super::client::{JiraApi, JiraClient};
 use super::types::{IssueUpdate, Transition};
@@ -14,6 +16,7 @@ pub struct UpdateArgs {
     pub status: Option<String>,
     pub assign: Option<String>,
     pub body: Option<String>,
+    pub body_adf: Option<PathBuf>,
 }
 
 /// Run the jira update command
@@ -29,8 +32,18 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
     let mut output = String::new();
     let mut changes_made = false;
 
+    // Resolve --body-adf to an ADF Value up-front so we can short-circuit
+    // on a missing or malformed file before we touch the network.
+    let description_adf = match &args.body_adf {
+        Some(path) => Some(load_adf(path)?),
+        None => None,
+    };
+
     // Handle field updates
-    let has_field_updates = args.summary.is_some() || args.assign.is_some() || args.body.is_some();
+    let has_field_updates = args.summary.is_some()
+        || args.assign.is_some()
+        || args.body.is_some()
+        || description_adf.is_some();
     if has_field_updates {
         let assignee = match &args.assign {
             Some(a) if a == "me" => {
@@ -44,6 +57,7 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
         let update = IssueUpdate {
             summary: args.summary.clone(),
             description: args.body.clone(),
+            description_adf,
             assignee,
         };
 
@@ -58,6 +72,9 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
         }
         if args.body.is_some() {
             output.push_str("\x1b[32m\u{2713}\x1b[0m Updated description\n");
+        }
+        if args.body_adf.is_some() {
+            output.push_str("\x1b[32m\u{2713}\x1b[0m Updated description (raw ADF)\n");
         }
         if args.assign.is_some() {
             output.push_str("\x1b[32m\u{2713}\x1b[0m Updated assignee\n");
@@ -79,7 +96,7 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
     }
 
     if !changes_made {
-        bail!("No changes specified. Use --summary, --body, --status, or --assign.");
+        bail!("No changes specified. Use --summary, --body, --body-adf, --status, or --assign.");
     }
 
     Ok(output)
@@ -112,4 +129,27 @@ fn find_transition<'a>(transitions: &'a [Transition], target: &str) -> Result<&'
         target,
         available.join(", ")
     )
+}
+
+/// Read an ADF document from a file and validate it has the expected
+/// `{"type": "doc", "version": 1, "content": [...]}` shape. Returning
+/// early here gives the user a clear error before any HTTP round-trip.
+pub(crate) fn load_adf(path: &Path) -> Result<serde_json::Value> {
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read ADF file {}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .with_context(|| format!("Invalid JSON in ADF file {}", path.display()))?;
+    if value["type"].as_str() != Some("doc") {
+        bail!(
+            "ADF file {} is missing top-level \"type\": \"doc\"",
+            path.display()
+        );
+    }
+    if !value["content"].is_array() {
+        bail!(
+            "ADF file {} is missing top-level \"content\" array",
+            path.display()
+        );
+    }
+    Ok(value)
 }

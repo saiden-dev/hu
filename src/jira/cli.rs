@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
@@ -47,9 +49,17 @@ pub enum JiraCommand {
         #[arg(long)]
         assign: Option<String>,
 
-        /// New description/body text
+        /// New description/body text. Treated as Markdown — headings,
+        /// lists, code, links, and emphasis are rendered as rich text.
         #[arg(long, alias = "description")]
         body: Option<String>,
+
+        /// Read raw ADF JSON from the given file and use it as the
+        /// description verbatim. Use this when you've prepared a
+        /// document with mentions, panels, or other structures
+        /// outside the supported Markdown subset.
+        #[arg(long = "body-adf", value_name = "PATH", conflicts_with = "body")]
+        body_adf: Option<PathBuf>,
     },
 }
 
@@ -143,6 +153,34 @@ mod tests {
     }
 
     #[test]
+    fn parses_update_with_body_adf() {
+        let cmd = build_cmd();
+        let matches = cmd.try_get_matches_from([
+            "test",
+            "update",
+            "PROJ-123",
+            "--body-adf",
+            "/tmp/some.json",
+        ]);
+        assert!(matches.is_ok());
+    }
+
+    #[test]
+    fn body_and_body_adf_are_mutually_exclusive() {
+        let cmd = build_cmd();
+        let matches = cmd.try_get_matches_from([
+            "test",
+            "update",
+            "PROJ-123",
+            "--body",
+            "text",
+            "--body-adf",
+            "/tmp/x.json",
+        ]);
+        assert!(matches.is_err());
+    }
+
+    #[test]
     fn update_requires_key() {
         let cmd = build_cmd();
         let matches = cmd.try_get_matches_from(["test", "update", "--summary", "Title"]);
@@ -210,6 +248,7 @@ mod tests {
             status: None,
             assign: None,
             body: None,
+            body_adf: None,
         };
         let debug_str = format!("{:?}", cmd);
         assert!(debug_str.contains("Update"));
