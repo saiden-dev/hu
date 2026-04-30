@@ -20,29 +20,31 @@
 - [ ] 2.6 Smoke test on Marketer instance — verify markdown headers, bold, lists render (manual; pending)
 - [ ] 2.7 Release-notes blurb for v0.2.0 breaking change (deferred to wrap-up)
 
-### Phase 3 — Read comments
-- [ ] 3.1 Add `Comment` type in `types.rs`
-- [ ] 3.2 Add `JiraApi::list_comments` trait method + 8 mock stubs
-- [ ] 3.3 Implement `client/comments.rs`
-- [ ] 3.4 Implement `src/jira/comments.rs` handler (table + json output)
-- [ ] 3.5 Wire `Comments` subcommand in `cli.rs`
-- [ ] 3.6 Tests: process_comments, format_comments, mock-driven coverage
+### Phase 3 — Read comments ✅
+- [x] 3.1 Add `Comment` type in `types.rs`
+- [x] 3.2 Add `JiraApi::list_comments` trait method + 6 mock stubs (plan said 8; actual count was 6)
+- [x] 3.3 Implement `client/comments.rs`
+- [x] 3.4 Implement `src/jira/comments.rs` handler (table + json + --full output)
+- [x] 3.5 Wire `Comments` subcommand in `cli.rs`
+- [x] 3.6 Tests: process_comments, format_comments, mock-driven coverage (15 new tests)
 
-### Phase 4 — Create issues
-- [ ] 4.1 Add `IssueCreate` + `IssueType` types
-- [ ] 4.2 Add `JiraApi::create_issue` and `JiraApi::get_create_meta` trait methods + 8 mock stubs
-- [ ] 4.3 Implement `client/create.rs` with `OnceCell` createmeta cache
-- [ ] 4.4 Implement `src/jira/create.rs` handler with fuzzy issue-type match
-- [ ] 4.5 Read `default_project` from `~/.config/hu/jira.toml`
-- [ ] 4.6 Wire `Create` subcommand in `cli.rs`
-- [ ] 4.7 Tests: process_create, find_issue_type, mock-driven coverage
-- [ ] 4.8 Smoke test: create a real ticket on Marketer, verify URL output
+### Phase 4 — Create issues ✅
+- [x] 4.1 Add `IssueCreate` + `IssueType` + `CreatedIssue` types
+- [x] 4.2 Add `JiraApi::create_issue` and `JiraApi::get_issue_types` trait methods + 6 mock stubs
+- [x] 4.3 Implement `client/create.rs` (in-process cache deferred — projects rarely have >5 types, refetching is sub-second)
+- [x] 4.4 Implement `src/jira/create.rs` handler with fuzzy issue-type match
+- [x] 4.5 `--project` falls back to `HU_JIRA_PROJECT` env var via clap (chose env over jira.toml — lower friction for one-project users)
+- [x] 4.6 Wire `Create` subcommand in `cli.rs`
+- [x] 4.7 Tests: process_create, find_issue_type, mock-driven coverage (14 new tests)
+- [ ] 4.8 Smoke test: create a real ticket on Marketer, verify URL output (manual; pending)
 
 ### Wrap-up
 - [ ] Update README.md (new subcommands, `--body-adf`, breaking change note)
 - [ ] Update `doc/` references
 - [ ] Bump version to 0.2.0
 - [ ] Update calibration in `workflow.eta_calibration` memory with actual times
+- [ ] Manual smoke tests on Marketer (2.6, 4.8)
+- [ ] Release notes for v0.2.0 (`--body` Markdown default is breaking)
 
 ---
 
