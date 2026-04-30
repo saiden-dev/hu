@@ -149,8 +149,7 @@ mod tests {
         let result = execute_ls(&[]);
         if detect_ls_binary() == "gls" {
             // On macOS, gls might not be installed in CI
-            if result.is_ok() {
-                let stdout = result.unwrap();
+            if let Ok(stdout) = result {
                 // Should produce some output (current dir is not empty)
                 assert!(!stdout.is_empty());
             }
@@ -163,11 +162,10 @@ mod tests {
     #[test]
     fn execute_ls_nonexistent_dir() {
         let result = execute_ls(&["/nonexistent/path/xyz123".to_string()]);
-        // Should fail because path does not exist
-        if result.is_ok() {
-            // Some ls versions may not fail, just print error to stderr
-        } else {
-            let err = result.unwrap_err().to_string();
+        // Should fail because path does not exist; some ls versions
+        // print to stderr without erroring, so accept either path.
+        if let Err(e) = result {
+            let err = e.to_string();
             assert!(!err.is_empty());
         }
     }

@@ -325,6 +325,7 @@ mod tests {
         let json = r#"{"ok": false, "error": "channel_not_found"}"#;
 
         #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
         struct TestResponse {
             ok: bool,
         }
@@ -341,6 +342,7 @@ mod tests {
         let json = r#"{"ok": false}"#;
 
         #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
         struct TestResponse {
             ok: bool,
         }
@@ -357,6 +359,7 @@ mod tests {
         let json = "not json at all";
 
         #[derive(Debug, serde::Deserialize)]
+        #[allow(dead_code)]
         struct TestResponse {
             ok: bool,
         }

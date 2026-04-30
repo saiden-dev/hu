@@ -214,7 +214,8 @@ fn constants_are_valid() {
     assert!(AUTH_URL.starts_with("https://"));
     assert!(TOKEN_URL.starts_with("https://"));
     assert!(RESOURCES_URL.starts_with("https://"));
-    assert!(CALLBACK_PORT > 0);
+    // CALLBACK_PORT is a u16 constant; bounds-checking is compile-time.
+    const _: () = assert!(CALLBACK_PORT > 0);
     assert!(!SCOPES.is_empty());
 }
 

@@ -454,7 +454,7 @@ mod tests {
             // May fail if remote ref doesn't exist, but function should work
             if let Ok(behind) = result {
                 // Just verify it returns a bool
-                assert!(behind || !behind);
+                let _: bool = behind;
             }
         }
     }
@@ -465,7 +465,7 @@ mod tests {
         if let Ok(branch) = get_branch(Path::new(".")) {
             let result = is_ahead_of_remote(Path::new("."), &branch);
             if let Ok(ahead) = result {
-                assert!(ahead || !ahead);
+                let _: bool = ahead;
             }
         }
     }

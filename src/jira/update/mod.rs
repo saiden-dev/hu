@@ -30,8 +30,7 @@ pub async fn process_update(client: &impl JiraApi, args: &UpdateArgs) -> Result<
     let mut changes_made = false;
 
     // Handle field updates
-    let has_field_updates =
-        args.summary.is_some() || args.assign.is_some() || args.body.is_some();
+    let has_field_updates = args.summary.is_some() || args.assign.is_some() || args.body.is_some();
     if has_field_updates {
         let assignee = match &args.assign {
             Some(a) if a == "me" => {

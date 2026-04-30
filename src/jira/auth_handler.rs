@@ -18,7 +18,8 @@ mod tests {
 
     #[test]
     fn module_compiles() {
-        // Verify the module structure is correct
-        assert!(true);
+        // Verify the module structure is correct — the existence of this
+        // function symbol is the assertion.
+        let _: fn() = module_compiles;
     }
 }

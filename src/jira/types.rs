@@ -22,6 +22,7 @@ pub struct Issue {
 
 /// Jira sprint (from Agile API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct Sprint {
     pub id: i64,
     pub name: String,

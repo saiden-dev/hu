@@ -325,7 +325,7 @@ mod tests {
     fn check_status_missing() {
         let temp = TempDir::new().unwrap();
         let component = &templates::COMPONENTS[0];
-        let status = check_component_status(component, &temp.path().to_path_buf());
+        let status = check_component_status(component, temp.path());
         assert_eq!(status.status, InstallStatus::Missing);
     }
 
@@ -339,7 +339,7 @@ mod tests {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, component.content).unwrap();
 
-        let status = check_component_status(component, &temp.path().to_path_buf());
+        let status = check_component_status(component, temp.path());
         assert_eq!(status.status, InstallStatus::Current);
     }
 
@@ -353,7 +353,7 @@ mod tests {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, "modified content").unwrap();
 
-        let status = check_component_status(component, &temp.path().to_path_buf());
+        let status = check_component_status(component, temp.path());
         assert_eq!(status.status, InstallStatus::Modified);
     }
 
@@ -362,7 +362,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let component = &templates::COMPONENTS[0];
 
-        install_component(component, &temp.path().to_path_buf()).unwrap();
+        install_component(component, temp.path()).unwrap();
 
         let target = temp.path().join(component.path);
         assert!(target.exists());
@@ -374,7 +374,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let hook = templates::get_hooks()[0];
 
-        install_component(hook, &temp.path().to_path_buf()).unwrap();
+        install_component(hook, temp.path()).unwrap();
 
         let target = temp.path().join(hook.path);
         let perms = fs::metadata(&target).unwrap().permissions();
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn update_settings_creates_file() {
         let temp = TempDir::new().unwrap();
-        update_settings_json(&temp.path().to_path_buf()).unwrap();
+        update_settings_json(temp.path()).unwrap();
 
         let settings_path = temp.path().join("settings.json");
         assert!(settings_path.exists());
@@ -407,7 +407,7 @@ mod tests {
         )
         .unwrap();
 
-        update_settings_json(&temp.path().to_path_buf()).unwrap();
+        update_settings_json(temp.path()).unwrap();
 
         let content: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();

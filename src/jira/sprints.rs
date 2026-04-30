@@ -46,17 +46,21 @@ pub async fn run(state: &str) -> Result<()> {
                     let id = s["id"].as_i64().unwrap_or(0);
                     let sprint_state = s["state"].as_str().unwrap_or("");
                     if id > 0 && !sprints.contains_key(&id) && sprint_state == state {
-                        sprints.insert(id, SprintInfo {
+                        sprints.insert(
                             id,
-                            name: s["name"].as_str().unwrap_or("?").to_string(),
-                            state: sprint_state.to_string(),
-                            start_date: s["startDate"].as_str().map(String::from),
-                            end_date: s["endDate"].as_str().map(String::from),
-                            goal: s["goal"].as_str()
-                                .filter(|g| !g.is_empty())
-                                .map(String::from),
-                            board_id: s["boardId"].as_i64(),
-                        });
+                            SprintInfo {
+                                id,
+                                name: s["name"].as_str().unwrap_or("?").to_string(),
+                                state: sprint_state.to_string(),
+                                start_date: s["startDate"].as_str().map(String::from),
+                                end_date: s["endDate"].as_str().map(String::from),
+                                goal: s["goal"]
+                                    .as_str()
+                                    .filter(|g| !g.is_empty())
+                                    .map(String::from),
+                                board_id: s["boardId"].as_i64(),
+                            },
+                        );
                     }
                 }
             }
@@ -73,7 +77,8 @@ pub async fn run(state: &str) -> Result<()> {
 
     println!(
         "\x1b[1mSprints\x1b[0m ({} found, filter: {})\n",
-        sorted.len(), state
+        sorted.len(),
+        state
     );
 
     for sprint in &sorted {

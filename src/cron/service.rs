@@ -290,7 +290,7 @@ mod tests {
         let (minute, hour, dom, dow) = get_schedule_time();
         assert!(minute < 60);
         assert!(hour < 24);
-        assert!(dom >= 1 && dom <= 31);
+        assert!((1..=31).contains(&dom));
         assert!(dow < 7);
     }
 

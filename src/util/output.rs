@@ -26,7 +26,7 @@ mod tests {
     #[test]
     fn clone_preserves_variant() {
         let format = OutputFormat::Json;
-        let cloned = format.clone();
+        let cloned = format;
         assert_eq!(cloned, OutputFormat::Json);
     }
 
