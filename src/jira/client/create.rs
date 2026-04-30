@@ -6,10 +6,6 @@
 //!   types available on a project. The `?projectKeys=` flavour was
 //!   deprecated by Atlassian in 2024; we use the new path-style endpoint.
 
-// First production caller lands in chunk 4.B (handler + CLI subcommand).
-// The trait-level wiring is exercised by the test build.
-#![allow(dead_code)]
-
 use anyhow::{bail, Context, Result};
 
 use super::JiraClient;

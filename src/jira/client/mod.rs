@@ -55,12 +55,10 @@ pub trait JiraApi: Send + Sync {
     fn list_comments(&self, key: &str) -> impl Future<Output = Result<Vec<Comment>>> + Send;
 
     /// Create a new issue. Returns the new key + browse URL.
-    #[allow(dead_code)] // handler lands in chunk 4.B
     fn create_issue(&self, new: &IssueCreate) -> impl Future<Output = Result<CreatedIssue>> + Send;
 
     /// List the issue types available on a given project. Used to
     /// validate `--type` against what the project actually supports.
-    #[allow(dead_code)] // handler lands in chunk 4.B
     fn get_issue_types(
         &self,
         project_key: &str,

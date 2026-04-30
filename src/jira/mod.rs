@@ -18,6 +18,7 @@ mod auth_handler;
 mod cli;
 mod client;
 mod comments;
+mod create;
 mod search;
 mod service;
 mod show;
@@ -33,6 +34,7 @@ pub use cli::JiraCommand;
 pub use types::{Issue, IssueUpdate, Transition, User};
 
 use comments::CommentsArgs;
+use create::CreateArgs;
 use update::UpdateArgs;
 
 /// Run a Jira command (CLI entry point - formats and prints)
@@ -47,6 +49,26 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
         JiraCommand::Show { key } => show::run(&key).await,
         JiraCommand::Comments { key, full, json } => {
             comments::run(CommentsArgs { key, full, json }).await
+        }
+        JiraCommand::Create {
+            summary,
+            r#type,
+            project,
+            body,
+            body_adf,
+            assign,
+            json,
+        } => {
+            create::run(CreateArgs {
+                project_key: project,
+                summary,
+                issue_type: r#type,
+                body,
+                body_adf,
+                assign,
+                json,
+            })
+            .await
         }
         JiraCommand::Update {
             key,

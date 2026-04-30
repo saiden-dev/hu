@@ -32,6 +32,38 @@ pub enum JiraCommand {
         key: String,
     },
 
+    /// Create a new ticket
+    Create {
+        /// Issue summary / title (required)
+        #[arg(long, short = 's')]
+        summary: String,
+
+        /// Issue type — case-insensitive, fuzzy-matched against the
+        /// project's available types. Defaults to "Task".
+        #[arg(long, short = 't', default_value = "Task")]
+        r#type: String,
+
+        /// Project key (e.g. HU). Falls back to $HU_JIRA_PROJECT.
+        #[arg(long, short = 'p', env = "HU_JIRA_PROJECT")]
+        project: String,
+
+        /// Description body (Markdown). Mutually exclusive with --body-adf.
+        #[arg(long, alias = "description")]
+        body: Option<String>,
+
+        /// Read raw ADF JSON from file as the description body.
+        #[arg(long = "body-adf", value_name = "PATH", conflicts_with = "body")]
+        body_adf: Option<PathBuf>,
+
+        /// Assign to user (account ID or "me")
+        #[arg(long, short = 'a')]
+        assign: Option<String>,
+
+        /// Emit the created issue as JSON
+        #[arg(long, short = 'j')]
+        json: bool,
+    },
+
     /// List comments on a ticket
     Comments {
         /// Ticket key (e.g., PROJ-123)

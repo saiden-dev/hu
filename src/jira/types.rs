@@ -62,7 +62,6 @@ pub struct Transition {
 /// passthrough. Same precedence as [`IssueUpdate`]: ADF wins when both
 /// are set.
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)] // first caller lands in chunk 4.B (handler + CLI)
 pub struct IssueCreate {
     pub project_key: String,
     pub summary: String,
@@ -74,7 +73,6 @@ pub struct IssueCreate {
 
 /// One issue type as advertised by `GET /issue/createmeta/{key}/issuetypes`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // first caller lands in chunk 4.B
 pub struct IssueType {
     pub id: String,
     pub name: String,
@@ -84,7 +82,6 @@ pub struct IssueType {
 /// Result of [`JiraApi::create_issue`]. `url` is the human-facing
 /// browse URL for the new issue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // first caller lands in chunk 4.B
 pub struct CreatedIssue {
     pub id: String,
     pub key: String,
