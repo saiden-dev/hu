@@ -62,7 +62,6 @@ pub struct Transition {
 /// `body_adf` is the raw ADF document preserved for JSON output and
 /// any future full-fidelity rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // first caller lands in chunk 3.B (handler + CLI)
 pub struct Comment {
     pub id: String,
     pub author: User,

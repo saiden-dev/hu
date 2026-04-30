@@ -2,11 +2,6 @@
 //!
 //! Endpoints: `GET /issue/{key}/comment`.
 
-// First production caller lands in chunk 3.B (handler + CLI subcommand).
-// Tests inside this module exercise the parsers; the trait wiring is
-// already proven by the test build.
-#![allow(dead_code)]
-
 use anyhow::{bail, Context, Result};
 
 use super::JiraClient;

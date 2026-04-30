@@ -49,7 +49,6 @@ pub trait JiraApi: Send + Sync {
 
     /// List all comments on an issue, ordered as Jira returns them
     /// (oldest first).
-    #[allow(dead_code)] // handler lands in chunk 3.B
     fn list_comments(&self, key: &str) -> impl Future<Output = Result<Vec<Comment>>> + Send;
 }
 

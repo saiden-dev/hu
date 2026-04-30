@@ -17,6 +17,7 @@ mod auth;
 mod auth_handler;
 mod cli;
 mod client;
+mod comments;
 mod search;
 mod service;
 mod show;
@@ -31,6 +32,7 @@ use anyhow::Result;
 pub use cli::JiraCommand;
 pub use types::{Issue, IssueUpdate, Transition, User};
 
+use comments::CommentsArgs;
 use update::UpdateArgs;
 
 /// Run a Jira command (CLI entry point - formats and prints)
@@ -43,6 +45,9 @@ pub async fn run_command(cmd: JiraCommand) -> anyhow::Result<()> {
         JiraCommand::Sprints { state } => sprints::run(&state).await,
         JiraCommand::Search { query } => search::run(&query).await,
         JiraCommand::Show { key } => show::run(&key).await,
+        JiraCommand::Comments { key, full, json } => {
+            comments::run(CommentsArgs { key, full, json }).await
+        }
         JiraCommand::Update {
             key,
             summary,

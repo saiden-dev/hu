@@ -32,6 +32,20 @@ pub enum JiraCommand {
         key: String,
     },
 
+    /// List comments on a ticket
+    Comments {
+        /// Ticket key (e.g., PROJ-123)
+        key: String,
+
+        /// Show full comment bodies (multi-line) instead of a one-row-each table
+        #[arg(long, short = 'f')]
+        full: bool,
+
+        /// Emit JSON instead of a table
+        #[arg(long, short = 'j')]
+        json: bool,
+    },
+
     /// Update a ticket
     Update {
         /// Ticket key (e.g., PROJ-123)
