@@ -12,6 +12,7 @@
 //! - [`get_transitions`] - Get available transitions
 //! - [`transition_issue`] - Change issue status
 
+mod adf;
 mod auth;
 mod auth_handler;
 mod cli;
