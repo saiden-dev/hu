@@ -6,6 +6,7 @@
 use anyhow::{bail, Context, Result};
 
 use super::JiraClient;
+use crate::jira::adf;
 use crate::jira::types::{Issue, IssueUpdate, User};
 
 /// Get current authenticated user.
@@ -134,6 +135,9 @@ pub fn parse_single_issue(json: &serde_json::Value) -> Option<Issue> {
 }
 
 /// Extract description text from ADF or string format.
+///
+/// Returns [`None`] for null, missing, or empty descriptions so callers
+/// can render "no description" distinct from "empty string".
 pub(crate) fn extract_description(fields: &serde_json::Value) -> Option<String> {
     let description = &fields["description"];
     if description.is_null() {
@@ -141,38 +145,18 @@ pub(crate) fn extract_description(fields: &serde_json::Value) -> Option<String> 
     }
 
     if let Some(s) = description.as_str() {
-        return Some(s.to_string());
+        return if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        };
     }
 
-    let content = description["content"].as_array()?;
-    let text: Vec<String> = content
-        .iter()
-        .filter_map(extract_text_from_adf_node)
-        .collect();
-
+    let text = adf::adf_to_plain_text(description);
     if text.is_empty() {
         None
     } else {
-        Some(text.join("\n"))
-    }
-}
-
-/// Extract text from an ADF node recursively.
-pub(crate) fn extract_text_from_adf_node(node: &serde_json::Value) -> Option<String> {
-    if let Some(text) = node["text"].as_str() {
-        return Some(text.to_string());
-    }
-
-    let content = node["content"].as_array()?;
-    let texts: Vec<String> = content
-        .iter()
-        .filter_map(extract_text_from_adf_node)
-        .collect();
-
-    if texts.is_empty() {
-        None
-    } else {
-        Some(texts.join(""))
+        Some(text)
     }
 }
 
@@ -184,22 +168,12 @@ pub fn build_update_body(update: &IssueUpdate) -> serde_json::Value {
         fields.insert("summary".to_string(), serde_json::json!(summary));
     }
     if let Some(description) = &update.description {
-        // Jira uses ADF format for description.
-        // TODO(phase-2): replace with markdown_to_adf(description).
-        fields.insert(
-            "description".to_string(),
-            serde_json::json!({
-                "type": "doc",
-                "version": 1,
-                "content": [{
-                    "type": "paragraph",
-                    "content": [{
-                        "type": "text",
-                        "text": description
-                    }]
-                }]
-            }),
-        );
+        // Jira description is rich-text only (ADF). We treat the input
+        // as Markdown so headings, lists, code, etc. round-trip into
+        // the new editor on atlassian.net. Plain prose without any
+        // markup characters renders as a single paragraph identical
+        // to the previous behaviour.
+        fields.insert("description".to_string(), adf::markdown_to_adf(description));
     }
     if let Some(assignee) = &update.assignee {
         fields.insert(

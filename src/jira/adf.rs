@@ -17,11 +17,6 @@
 //!
 //! [`markdown_to_adf`]: fn.markdown_to_adf.html
 
-// The writer side of this module is exercised by inline tests but isn't
-// wired into a caller until chunk 2.B (update_issue) and 2.C (--body-adf).
-// The reader (`adf_to_plain_text`) lands its first caller in chunk 2.B too.
-#![allow(dead_code)]
-
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde_json::{json, Value};
 

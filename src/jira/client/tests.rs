@@ -1,6 +1,5 @@
 use super::issues::{
-    build_update_body, extract_description, extract_text_from_adf_node, parse_issues,
-    parse_single_issue, parse_user,
+    build_update_body, extract_description, parse_issues, parse_single_issue, parse_user,
 };
 use super::transitions::parse_transitions;
 use crate::jira::types::IssueUpdate;
@@ -191,33 +190,6 @@ fn extract_description_handles_empty_content() {
 }
 
 #[test]
-fn extract_text_from_adf_node_gets_text() {
-    let node = json!({"type": "text", "text": "Hello"});
-    let text = extract_text_from_adf_node(&node);
-    assert_eq!(text, Some("Hello".to_string()));
-}
-
-#[test]
-fn extract_text_from_adf_node_recurses() {
-    let node = json!({
-        "type": "paragraph",
-        "content": [
-            {"type": "text", "text": "A"},
-            {"type": "text", "text": "B"}
-        ]
-    });
-    let text = extract_text_from_adf_node(&node);
-    assert_eq!(text, Some("AB".to_string()));
-}
-
-#[test]
-fn extract_text_from_adf_node_handles_no_content() {
-    let node = json!({"type": "hardBreak"});
-    let text = extract_text_from_adf_node(&node);
-    assert!(text.is_none());
-}
-
-#[test]
 fn parse_transitions_extracts_transitions() {
     let json = json!({
         "transitions": [
@@ -269,6 +241,24 @@ fn build_update_body_with_description() {
     let body = build_update_body(&update);
     assert_eq!(body["fields"]["description"]["type"], "doc");
     assert_eq!(body["fields"]["description"]["version"], 1);
+}
+
+#[test]
+fn build_update_body_parses_description_as_markdown() {
+    // Plain text without markup characters still renders as a single
+    // paragraph (the old behaviour). Markdown elements are recognised
+    // and emitted as ADF block/inline structures.
+    let update = IssueUpdate {
+        summary: None,
+        description: Some("# Heading\n\n**bold** in body".to_string()),
+        assignee: None,
+    };
+    let body = build_update_body(&update);
+    let content = &body["fields"]["description"]["content"];
+    assert_eq!(content[0]["type"], "heading");
+    assert_eq!(content[0]["attrs"]["level"], 1);
+    assert_eq!(content[1]["content"][0]["text"], "bold");
+    assert_eq!(content[1]["content"][0]["marks"][0]["type"], "strong");
 }
 
 #[test]
