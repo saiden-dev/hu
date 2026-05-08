@@ -13,6 +13,7 @@ mod dotfiles;
 mod os;
 mod packages;
 mod pkgs;
+mod run;
 mod ssh;
 mod status;
 mod types;
@@ -31,9 +32,7 @@ use crate::util::shell::RealShell;
 pub async fn run_command(cmd: SetupCommand) -> Result<()> {
     match cmd {
         SetupCommand::Status | SetupCommand::Preview => run_status().await,
-        SetupCommand::Run(_) => {
-            bail!("hu setup run: not yet implemented (Phase 5)");
-        }
+        SetupCommand::Run(args) => run_full(args).await,
         SetupCommand::Pkgs(args) => run_pkgs(args).await,
         SetupCommand::Dotfiles => run_dotfiles().await,
         SetupCommand::Ssh => run_ssh().await,
@@ -78,6 +77,30 @@ async fn run_status() -> Result<()> {
     println!("{} host: {}", "◆".cyan(), os.label());
     println!("{}", display::render(&rows));
     println!("{}", display::summary(&rows));
+    Ok(())
+}
+
+async fn run_full(args: cli::RunArgs) -> Result<()> {
+    let os = Os::detect()?;
+    let cfg_base = config::load().context("load setup.toml")?;
+    let hostname = run::current_hostname();
+    let cfg = run::apply_host_overrides(cfg_base, &hostname);
+    let shell = RealShell;
+    let op = ssh::RealOp::new(&shell);
+    println!("{} host: {} ({})", "◆".cyan(), os.label(), hostname);
+    if args.dry_run {
+        println!("{} dry-run — no changes will be made", "◐".yellow());
+    }
+    if let Some(phase) = &args.only {
+        println!("{} only: {:?}", "◆".cyan(), phase);
+    }
+    let rows = run::run_full(&shell, &op, &cfg, &args, &os).await?;
+    println!("{}", display::render(&rows));
+    println!("{}", display::summary(&rows));
+    let any_failed = rows.iter().any(|r| r.status == types::Status::Failed);
+    if any_failed {
+        bail!("setup run had failures — see table above");
+    }
     Ok(())
 }
 
