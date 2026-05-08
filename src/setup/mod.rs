@@ -36,9 +36,7 @@ pub async fn run_command(cmd: SetupCommand) -> Result<()> {
         }
         SetupCommand::Pkgs(args) => run_pkgs(args).await,
         SetupCommand::Dotfiles => run_dotfiles().await,
-        SetupCommand::Ssh => {
-            bail!("hu setup ssh: not yet implemented (Phase 4)");
-        }
+        SetupCommand::Ssh => run_ssh().await,
         SetupCommand::Config { cmd } => run_config(cmd).await,
     }
 }
@@ -80,6 +78,28 @@ async fn run_status() -> Result<()> {
     println!("{} host: {}", "◆".cyan(), os.label());
     println!("{}", display::render(&rows));
     println!("{}", display::summary(&rows));
+    Ok(())
+}
+
+async fn run_ssh() -> Result<()> {
+    let os = Os::detect()?;
+    let cfg = config::load().context("load setup.toml")?;
+    let shell = RealShell;
+    let op = ssh::RealOp::new(&shell);
+    println!("{} host: {}", "◆".cyan(), os.label());
+    println!(
+        "{} ssh: vault={} items={}",
+        "◆".cyan(),
+        cfg.ssh.op_vault,
+        cfg.ssh.op_items.len()
+    );
+    let rows = ssh::run(&op, &cfg.ssh).await;
+    println!("{}", display::render(&rows));
+    println!("{}", display::summary(&rows));
+    let any_failed = rows.iter().any(|r| r.status == types::Status::Failed);
+    if any_failed {
+        bail!("ssh phase had failures — see table above");
+    }
     Ok(())
 }
 

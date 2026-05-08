@@ -123,6 +123,70 @@ pub fn op_ref(vault: &str, item: &str, field: &str) -> String {
     format!("op://{}/{}/{}", vault, item, field)
 }
 
+/// Decide how to apply a key spec given the current filesystem state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpecAction {
+    /// File exists with matching content + correct mode → nothing to do.
+    AlreadyMatches,
+    /// File missing or content differs — write it (idempotent overwrite).
+    WriteFile,
+}
+
+/// Inspect the filesystem and decide what action a `KeySpec` needs.
+///
+/// This is pure-ish — only reads. Tests cover the matrix without mocking.
+pub fn classify_spec(spec: &KeySpec) -> SpecAction {
+    if !spec.path.exists() {
+        return SpecAction::WriteFile;
+    }
+    let existing = match std::fs::read_to_string(&spec.path) {
+        Ok(s) => s,
+        Err(_) => return SpecAction::WriteFile,
+    };
+    if existing != spec.content {
+        return SpecAction::WriteFile;
+    }
+    if let Ok(meta) = std::fs::metadata(&spec.path) {
+        use std::os::unix::fs::PermissionsExt;
+        if meta.permissions().mode() & 0o777 != spec.mode {
+            return SpecAction::WriteFile;
+        }
+    }
+    SpecAction::AlreadyMatches
+}
+
+/// Apply one key spec to disk. Idempotent: returns `Already` when the file
+/// already matches; writes + chmods otherwise; re-reads to verify mode.
+pub fn apply_spec(spec: &KeySpec) -> Result<crate::setup::types::Status> {
+    use std::os::unix::fs::PermissionsExt;
+    if classify_spec(spec) == SpecAction::AlreadyMatches {
+        return Ok(crate::setup::types::Status::Already);
+    }
+    if let Some(parent) = spec.path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create dir {}", parent.display()))?;
+    }
+    std::fs::write(&spec.path, &spec.content)
+        .with_context(|| format!("write {}", spec.path.display()))?;
+    let mut perms = std::fs::metadata(&spec.path)
+        .with_context(|| format!("stat {}", spec.path.display()))?
+        .permissions();
+    perms.set_mode(spec.mode);
+    std::fs::set_permissions(&spec.path, perms)
+        .with_context(|| format!("chmod {}", spec.path.display()))?;
+    // Re-verify mode landed.
+    let final_mode = std::fs::metadata(&spec.path)?.permissions().mode() & 0o777;
+    if final_mode != spec.mode {
+        anyhow::bail!(
+            "post-write mode mismatch on {}: got {:o}, want {:o}",
+            spec.path.display(),
+            final_mode,
+            spec.mode
+        );
+    }
+    Ok(crate::setup::types::Status::Installed)
+}
+
 /// Fetch the private + public key pair for one item.
 pub async fn fetch_key_pair<O: OpClient + ?Sized>(
     op: &O,
@@ -138,6 +202,76 @@ pub async fn fetch_key_pair<O: OpClient + ?Sized>(
         .await
         .with_context(|| format!("read public key for {}/{}", vault, item))?;
     Ok((private, public))
+}
+
+/// Orchestrate the full SSH phase: account check → for each item fetch
+/// (private, public) → write specs.
+pub async fn run<O: OpClient + ?Sized>(
+    op: &O,
+    config: &crate::setup::config::SshConfig,
+) -> Vec<crate::setup::display::StatusRow> {
+    use crate::setup::display::StatusRow;
+    use crate::setup::types::Status;
+
+    let mut rows = Vec::new();
+
+    let signed_in = match op.account_status().await {
+        Ok(b) => b,
+        Err(e) => {
+            rows.push(
+                StatusRow::new("ssh", "op-account", Status::Failed)
+                    .with_note(&format!("account_status errored: {}", e)),
+            );
+            return rows;
+        }
+    };
+    if !signed_in {
+        rows.push(
+            StatusRow::new("ssh", "op-account", Status::Failed)
+                .with_note("no signed-in 1Password account — run `op account add`"),
+        );
+        return rows;
+    }
+    rows.push(StatusRow::new("ssh", "op-account", Status::Already).with_note("signed in"));
+
+    let key_dir = expand_tilde(&config.key_dir);
+    for item in &config.op_items {
+        match fetch_key_pair(op, &config.op_vault, item).await {
+            Err(e) => {
+                rows.push(
+                    StatusRow::new("ssh", item, Status::Failed)
+                        .with_note(&format!("fetch failed: {}", e)),
+                );
+                continue;
+            }
+            Ok((priv_k, pub_k)) => {
+                let specs = key_specs_for_item(&key_dir, item, priv_k, pub_k);
+                for spec in specs {
+                    let basename = spec
+                        .path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("?")
+                        .to_string();
+                    match apply_spec(&spec) {
+                        Ok(status) => rows.push(
+                            StatusRow::new("ssh", &basename, status)
+                                .with_note(&format!("mode {:o}", spec.mode)),
+                        ),
+                        Err(e) => rows.push(
+                            StatusRow::new("ssh", &basename, Status::Failed)
+                                .with_note(&format!("apply failed: {}", e)),
+                        ),
+                    }
+                }
+            }
+        }
+    }
+    rows
+}
+
+fn expand_tilde(raw: &str) -> std::path::PathBuf {
+    crate::setup::dotfiles::expand_tilde(raw)
 }
 
 #[cfg(test)]
@@ -315,6 +449,179 @@ mod tests {
         let op = RealOp::new(&shell);
         let err = op.read("op://V/I/f").await.unwrap_err();
         assert!(err.to_string().contains("op read"));
+    }
+
+    #[test]
+    fn classify_spec_returns_write_when_missing() {
+        let spec = KeySpec {
+            path: PathBuf::from("/nonexistent/path/file"),
+            mode: 0o600,
+            content: "x".into(),
+        };
+        assert_eq!(classify_spec(&spec), SpecAction::WriteFile);
+    }
+
+    #[test]
+    fn classify_spec_returns_already_when_match() {
+        let dir = std::env::temp_dir().join("hu-classify-already");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("k");
+        std::fs::write(&path, "abc\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&path, perms).unwrap();
+        let spec = KeySpec {
+            path: path.clone(),
+            mode: 0o600,
+            content: "abc\n".into(),
+        };
+        assert_eq!(classify_spec(&spec), SpecAction::AlreadyMatches);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn classify_spec_returns_write_when_content_differs() {
+        let dir = std::env::temp_dir().join("hu-classify-content-diff");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("k");
+        std::fs::write(&path, "old\n").unwrap();
+        let spec = KeySpec {
+            path: path.clone(),
+            mode: 0o600,
+            content: "new\n".into(),
+        };
+        assert_eq!(classify_spec(&spec), SpecAction::WriteFile);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn classify_spec_returns_write_when_mode_differs() {
+        let dir = std::env::temp_dir().join("hu-classify-mode-diff");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("k");
+        std::fs::write(&path, "abc\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o644); // different from spec
+        std::fs::set_permissions(&path, perms).unwrap();
+        let spec = KeySpec {
+            path: path.clone(),
+            mode: 0o600,
+            content: "abc\n".into(),
+        };
+        assert_eq!(classify_spec(&spec), SpecAction::WriteFile);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn apply_spec_writes_file_with_correct_mode() {
+        let dir = std::env::temp_dir().join("hu-apply-spec-write");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("id_test");
+        let spec = KeySpec {
+            path: path.clone(),
+            mode: 0o600,
+            content: "PRIVATE\n".into(),
+        };
+        let status = apply_spec(&spec).unwrap();
+        assert_eq!(status, crate::setup::types::Status::Installed);
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, "PRIVATE\n");
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn apply_spec_skips_when_already_matches() {
+        let dir = std::env::temp_dir().join("hu-apply-spec-already");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("id_test");
+        std::fs::write(&path, "abc\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&path, perms).unwrap();
+        let spec = KeySpec {
+            path: path.clone(),
+            mode: 0o600,
+            content: "abc\n".into(),
+        };
+        let status = apply_spec(&spec).unwrap();
+        assert_eq!(status, crate::setup::types::Status::Already);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn ssh_run_fails_when_not_signed_in() {
+        let op = MockOp::new();
+        op.set_signed_in(false);
+        let cfg = crate::setup::config::SshConfig::default();
+        let rows = run(&op, &cfg).await;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, crate::setup::types::Status::Failed);
+        assert!(rows[0].note.contains("op account add"));
+    }
+
+    #[tokio::test]
+    async fn ssh_run_writes_keys_when_signed_in() {
+        let dir = std::env::temp_dir().join("hu-ssh-run-keys");
+        let _ = std::fs::remove_dir_all(&dir);
+        let op = MockOp::new();
+        op.expect("op://Personal/SSH/id_test/private_key", "PRIV-CONTENT");
+        op.expect("op://Personal/SSH/id_test/public_key", "PUB-CONTENT");
+        let cfg = crate::setup::config::SshConfig {
+            op_vault: "Personal".into(),
+            op_items: vec!["SSH/id_test".into()],
+            key_dir: dir.to_string_lossy().into_owned(),
+        };
+        let rows = run(&op, &cfg).await;
+        // 1 op-account + 2 key files
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].name, "op-account");
+        assert_eq!(rows[1].name, "id_test");
+        assert_eq!(rows[2].name, "id_test.pub");
+        assert_eq!(rows[1].status, crate::setup::types::Status::Installed);
+        assert_eq!(rows[2].status, crate::setup::types::Status::Installed);
+        // Verify perms landed
+        use std::os::unix::fs::PermissionsExt;
+        let priv_mode = std::fs::metadata(dir.join("id_test"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(priv_mode, 0o600);
+        let pub_mode = std::fs::metadata(dir.join("id_test.pub"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(pub_mode, 0o644);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn ssh_run_marks_item_failed_when_op_read_errors() {
+        let dir = std::env::temp_dir().join("hu-ssh-run-op-fail");
+        let _ = std::fs::remove_dir_all(&dir);
+        let op = MockOp::new();
+        // private_key missing → fetch fails
+        let cfg = crate::setup::config::SshConfig {
+            op_vault: "V".into(),
+            op_items: vec!["I".into()],
+            key_dir: dir.to_string_lossy().into_owned(),
+        };
+        let rows = run(&op, &cfg).await;
+        assert_eq!(rows.len(), 2); // op-account + 1 item failure
+        let item_row = &rows[1];
+        assert_eq!(item_row.status, crate::setup::types::Status::Failed);
+        assert!(item_row.note.contains("fetch failed"));
     }
 
     #[tokio::test]
