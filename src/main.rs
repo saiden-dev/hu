@@ -16,6 +16,7 @@ mod pagerduty;
 mod pipeline;
 mod read;
 mod sentry;
+mod setup;
 mod shell;
 mod slack;
 mod util;
@@ -137,6 +138,12 @@ async fn run_command(cmd: Command) -> anyhow::Result<()> {
         }
         Command::Mcp { cmd: None } => {
             print_subcommand_help("mcp")?;
+        }
+        Command::Setup { cmd: Some(cmd) } => {
+            return setup::run_command(cmd).await;
+        }
+        Command::Setup { cmd: None } => {
+            print_subcommand_help("setup")?;
         }
     }
     Ok(())

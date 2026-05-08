@@ -14,6 +14,7 @@ use crate::pagerduty::PagerDutyCommand;
 use crate::pipeline::PipelineCommand;
 use crate::read::ReadArgs;
 use crate::sentry::SentryCommand;
+use crate::setup::SetupCommand;
 use crate::shell::ShellCommand;
 use crate::slack::SlackCommands;
 use crate::utils::UtilsCommand;
@@ -128,5 +129,11 @@ pub enum Command {
     Mcp {
         #[command(subcommand)]
         cmd: Option<McpCommand>,
+    },
+
+    /// Universal fresh-host bootstrap (packages, dotfiles, ssh)
+    Setup {
+        #[command(subcommand)]
+        cmd: Option<SetupCommand>,
     },
 }
