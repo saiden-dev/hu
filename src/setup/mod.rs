@@ -6,12 +6,16 @@
 //! Each step follows the idempotency contract `check → skip-or-act → re-verify`.
 
 mod cli;
+mod config;
 mod os;
 mod types;
 
 pub use cli::SetupCommand;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use owo_colors::OwoColorize;
+
+use cli::ConfigCommand;
 
 /// Dispatch entry point — called from `main.rs`.
 pub async fn run_command(cmd: SetupCommand) -> Result<()> {
@@ -31,8 +35,54 @@ pub async fn run_command(cmd: SetupCommand) -> Result<()> {
         SetupCommand::Ssh => {
             bail!("hu setup ssh: not yet implemented (Phase 4)");
         }
-        SetupCommand::Config { cmd: _ } => {
-            bail!("hu setup config: not yet implemented (Phase 0 chunk 0.3)");
+        SetupCommand::Config { cmd } => run_config(cmd).await,
+    }
+}
+
+async fn run_config(cmd: Option<ConfigCommand>) -> Result<()> {
+    let Some(cmd) = cmd else {
+        // Default action: show path
+        return show_config_path();
+    };
+    match cmd {
+        ConfigCommand::Init => init_config(),
+        ConfigCommand::Path => show_config_path(),
+    }
+}
+
+fn init_config() -> Result<()> {
+    let outcome = config::init_default().context("init setup.toml")?;
+    if outcome.existed {
+        println!(
+            "{} setup.toml already exists at {}",
+            "◐".yellow(),
+            outcome.path.display()
+        );
+    } else {
+        println!(
+            "{} wrote default setup.toml to {}",
+            "✓".green(),
+            outcome.path.display()
+        );
+    }
+    Ok(())
+}
+
+fn show_config_path() -> Result<()> {
+    match config::config_path() {
+        Some(path) => {
+            let exists = path.exists();
+            let icon = if exists {
+                "✓".green().to_string()
+            } else {
+                "○".dimmed().to_string()
+            };
+            println!("{} {}", icon, path.display());
+            if !exists {
+                println!("  (not yet created — run `hu setup config init`)");
+            }
+            Ok(())
         }
+        None => bail!("could not resolve config directory for hu on this platform"),
     }
 }
