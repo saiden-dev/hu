@@ -100,6 +100,34 @@ pub async fn stow_apply<S: Shell + ?Sized>(
     }
 }
 
+/// Orchestrate the full dotfiles phase: clone (or skip) → stow each package.
+///
+/// Returns one `StatusRow` per step. If the clone fails the per-package
+/// stow rows are skipped — there's nothing to stow from.
+pub async fn run<S: Shell + ?Sized>(shell: &S, config: &DotfilesConfig) -> Vec<StatusRow> {
+    let mut rows = Vec::with_capacity(1 + config.packages.len());
+    let clone_row = ensure_clone(shell, config).await;
+    let clone_satisfied = clone_row.status.is_satisfied();
+    rows.push(clone_row);
+    if !clone_satisfied {
+        for pkg in &config.packages {
+            rows.push(
+                StatusRow::new("stow", pkg, Status::Skipped)
+                    .with_note("clone failed — nothing to stow"),
+            );
+        }
+        return rows;
+    }
+    let target = expand_tilde("~/").to_string_lossy().into_owned();
+    let clone_to = expand_tilde(&config.clone_to)
+        .to_string_lossy()
+        .into_owned();
+    for pkg in &config.packages {
+        rows.push(stow_apply(shell, &clone_to, &target, pkg).await);
+    }
+    rows
+}
+
 /// Extract a concise conflict summary from stow stderr.
 ///
 /// stow's stderr lists conflicting files line by line. We keep the gist
@@ -262,5 +290,63 @@ existing target is not owned by stow: .vimrc
         let stderr = "stow: command not found\n";
         let summary = parse_stow_conflicts(stderr);
         assert!(summary.starts_with("stow failed:"));
+    }
+
+    #[tokio::test]
+    async fn run_skips_stow_when_clone_fails() {
+        let mut config = dotfiles_config();
+        config.clone_to = "/tmp/hu-run-clone-fails".into();
+        let _ = std::fs::remove_dir_all(&config.clone_to);
+        let shell = FakeShell::new();
+        shell.expect(
+            "gh",
+            &[
+                "repo",
+                "clone",
+                "aladac/dotfiles",
+                "/tmp/hu-run-clone-fails",
+            ],
+            "",
+            1,
+        );
+        let rows = run(&shell, &config).await;
+        assert_eq!(rows.len(), 1 + config.packages.len());
+        assert_eq!(rows[0].status, Status::Failed);
+        for stow_row in &rows[1..] {
+            assert_eq!(stow_row.status, Status::Skipped);
+            assert!(stow_row.note.contains("clone failed"));
+        }
+    }
+
+    #[tokio::test]
+    async fn run_stows_each_configured_package_when_clone_present() {
+        let temp = std::env::temp_dir().join("hu-run-clone-present");
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(temp.join(".git")).unwrap();
+        let mut config = dotfiles_config();
+        config.clone_to = temp.to_string_lossy().into_owned();
+        config.packages = vec!["zsh".into(), "kitty".into()];
+
+        let target = expand_tilde("~/").to_string_lossy().into_owned();
+        let clone_to = temp.to_string_lossy().into_owned();
+        let shell = FakeShell::new();
+        shell.expect(
+            "stow",
+            &["-R", "-d", &clone_to, "-t", &target, "zsh"],
+            "",
+            0,
+        );
+        shell.expect(
+            "stow",
+            &["-R", "-d", &clone_to, "-t", &target, "kitty"],
+            "",
+            0,
+        );
+        let rows = run(&shell, &config).await;
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].status, Status::Already);
+        assert_eq!(rows[1].status, Status::Installed);
+        assert_eq!(rows[2].status, Status::Installed);
+        std::fs::remove_dir_all(&temp).unwrap();
     }
 }

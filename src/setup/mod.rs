@@ -34,9 +34,7 @@ pub async fn run_command(cmd: SetupCommand) -> Result<()> {
             bail!("hu setup run: not yet implemented (Phase 5)");
         }
         SetupCommand::Pkgs(args) => run_pkgs(args).await,
-        SetupCommand::Dotfiles => {
-            bail!("hu setup dotfiles: not yet implemented (Phase 3)");
-        }
+        SetupCommand::Dotfiles => run_dotfiles().await,
         SetupCommand::Ssh => {
             bail!("hu setup ssh: not yet implemented (Phase 4)");
         }
@@ -81,6 +79,27 @@ async fn run_status() -> Result<()> {
     println!("{} host: {}", "◆".cyan(), os.label());
     println!("{}", display::render(&rows));
     println!("{}", display::summary(&rows));
+    Ok(())
+}
+
+async fn run_dotfiles() -> Result<()> {
+    let os = Os::detect()?;
+    let cfg = config::load().context("load setup.toml")?;
+    let shell = RealShell;
+    println!("{} host: {}", "◆".cyan(), os.label());
+    println!(
+        "{} dotfiles: {} → {}",
+        "◆".cyan(),
+        cfg.dotfiles.repo,
+        cfg.dotfiles.clone_to
+    );
+    let rows = dotfiles::run(&shell, &cfg.dotfiles).await;
+    println!("{}", display::render(&rows));
+    println!("{}", display::summary(&rows));
+    let any_failed = rows.iter().any(|r| r.status == types::Status::Failed);
+    if any_failed {
+        bail!("dotfiles phase had failures — see table above");
+    }
     Ok(())
 }
 
