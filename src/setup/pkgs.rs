@@ -14,7 +14,7 @@ use crate::setup::cli::PkgsArgs;
 use crate::setup::config::SetupConfig;
 use crate::setup::display::StatusRow;
 use crate::setup::os::Os;
-use crate::setup::packages::{BrewInstaller, InstallResult, Installer};
+use crate::setup::packages::{BrewInstaller, InstallResult, Installer, MiseInstaller};
 use crate::setup::types::Status;
 use crate::util::shell::Shell;
 
@@ -33,10 +33,11 @@ pub async fn run<S: Shell + ?Sized>(
     args: &PkgsArgs,
     os: &Os,
 ) -> Result<Vec<StatusRow>> {
-    let filtered = filter_brew_packages(&config.packages.brew, &args.only);
+    let filtered_brew = filter_packages(&config.packages.brew, &args.only);
+    let filtered_mise = filter_packages(&config.packages.mise, &args.only);
 
     if args.dry_run {
-        return Ok(dry_run_rows(os, &filtered));
+        return Ok(dry_run_rows(os, &filtered_brew, &filtered_mise));
     }
 
     let mut rows = Vec::new();
@@ -50,26 +51,45 @@ pub async fn run<S: Shell + ?Sized>(
     let brew_result = ensure_brew(shell).await;
     rows.push(install_result_to_row("bootstrap", &brew_result));
     if !brew_result.status.is_satisfied() {
-        // Brew missing → can't proceed with T1 packages.
+        // Brew missing → can't proceed with T1 / T2 packages (mise comes via brew).
         return Ok(rows);
     }
 
     // 3. T1 brew packages
-    let installer = BrewInstaller;
-    for pkg in &filtered {
-        let r = installer.ensure(shell, pkg).await;
+    let brew = BrewInstaller;
+    for pkg in &filtered_brew {
+        let r = brew.ensure(shell, pkg).await;
         rows.push(install_result_to_row("brew", &r));
+    }
+
+    // 4. T2 mise-managed runtimes (only if mise itself is reachable)
+    if !filtered_mise.is_empty() && shell.which("mise").await {
+        let mise = MiseInstaller;
+        for pkg in &filtered_mise {
+            let r = mise.ensure(shell, pkg).await;
+            rows.push(install_result_to_row("mise", &r));
+        }
+    } else if !filtered_mise.is_empty() {
+        // mise not on PATH yet — can happen when brew just installed it but
+        // shims aren't in this shell's environment. Surface as Failed so
+        // Pilot knows to re-run after rehashing PATH.
+        for pkg in &filtered_mise {
+            rows.push(
+                StatusRow::new("mise", pkg, Status::Failed)
+                    .with_note("mise not on PATH — re-run after `eval \"$(mise activate)\"`"),
+            );
+        }
     }
 
     Ok(rows)
 }
 
-/// Apply the `--only` filter to a brew package list.
+/// Apply the `--only` filter to a package list (brew or mise).
 ///
 /// Empty filter → no filtering (all configured packages). Filter values that
-/// don't match a configured package are silently dropped (caller can validate
-/// upstream if strict matching is required).
-pub fn filter_brew_packages(configured: &[String], only: &[String]) -> Vec<String> {
+/// don't match a configured package are silently dropped. Matches against the
+/// full configured name (`node@lts` matches `node@lts`, not `node`).
+pub fn filter_packages(configured: &[String], only: &[String]) -> Vec<String> {
     if only.is_empty() {
         return configured.to_vec();
     }
@@ -80,7 +100,7 @@ pub fn filter_brew_packages(configured: &[String], only: &[String]) -> Vec<Strin
         .collect()
 }
 
-fn dry_run_rows(os: &Os, packages: &[String]) -> Vec<StatusRow> {
+fn dry_run_rows(os: &Os, brew: &[String], mise: &[String]) -> Vec<StatusRow> {
     let mut rows = Vec::new();
     if os.is_linux() {
         for pkg in crate::setup::bootstrap::LINUXBREW_APT_PREREQS {
@@ -90,8 +110,11 @@ fn dry_run_rows(os: &Os, packages: &[String]) -> Vec<StatusRow> {
         }
     }
     rows.push(StatusRow::new("bootstrap", "brew", Status::Skipped).with_note("dry-run"));
-    for pkg in packages {
+    for pkg in brew {
         rows.push(StatusRow::new("brew", pkg, Status::Skipped).with_note("dry-run"));
+    }
+    for pkg in mise {
+        rows.push(StatusRow::new("mise", pkg, Status::Skipped).with_note("dry-run"));
     }
     rows
 }
@@ -120,25 +143,32 @@ mod tests {
         cfg
     }
 
+    fn config_with_brew_and_mise(brew: &[&str], mise: &[&str]) -> SetupConfig {
+        let mut cfg = SetupConfig::default();
+        cfg.packages.brew = brew.iter().map(|s| s.to_string()).collect();
+        cfg.packages.mise = mise.iter().map(|s| s.to_string()).collect();
+        cfg
+    }
+
     #[test]
     fn filter_empty_returns_full_list() {
         let configured = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         let only: Vec<String> = vec![];
-        assert_eq!(filter_brew_packages(&configured, &only), configured);
+        assert_eq!(filter_packages(&configured, &only), configured);
     }
 
     #[test]
     fn filter_keeps_matching_packages() {
         let configured = vec!["gh".to_string(), "jq".to_string(), "op".to_string()];
         let only = vec!["gh".to_string(), "op".to_string()];
-        assert_eq!(filter_brew_packages(&configured, &only), vec!["gh", "op"]);
+        assert_eq!(filter_packages(&configured, &only), vec!["gh", "op"]);
     }
 
     #[test]
     fn filter_drops_unconfigured_names() {
         let configured = vec!["gh".to_string()];
         let only = vec!["gh".to_string(), "nonexistent".to_string()];
-        assert_eq!(filter_brew_packages(&configured, &only), vec!["gh"]);
+        assert_eq!(filter_packages(&configured, &only), vec!["gh"]);
     }
 
     #[tokio::test]
@@ -217,6 +247,52 @@ mod tests {
         assert_eq!(brew_rows[0].status, Status::Already);
         assert_eq!(brew_rows[1].name, "jq");
         assert_eq!(brew_rows[1].status, Status::Installed);
+    }
+
+    #[tokio::test]
+    async fn run_walks_brew_then_mise_when_both_configured() {
+        let shell = FakeShell::new();
+        shell.expect("which", &["brew"], "/opt/homebrew/bin/brew\n", 0);
+        shell.expect("brew", &["list", "--versions", "gh"], "gh 2.50.0\n", 0);
+        shell.expect("which", &["mise"], "/opt/homebrew/bin/mise\n", 0);
+        shell.expect("mise", &["current", "node"], "20.10.0\n", 0);
+        let cfg = config_with_brew_and_mise(&["gh"], &["node@lts"]);
+        let rows = run(&shell, &cfg, &args(vec![], false), &Os::Mac)
+            .await
+            .unwrap();
+        assert!(rows.iter().any(|r| r.category == "brew" && r.name == "gh"));
+        assert!(rows
+            .iter()
+            .any(|r| r.category == "mise" && r.name == "node@lts"));
+        let mise_row = rows.iter().find(|r| r.category == "mise").unwrap();
+        assert_eq!(mise_row.status, Status::Already);
+    }
+
+    #[tokio::test]
+    async fn run_marks_mise_failed_when_mise_not_on_path() {
+        let shell = FakeShell::new();
+        shell.expect("which", &["brew"], "/opt/homebrew/bin/brew\n", 0);
+        // mise not yet on PATH
+        shell.expect("which", &["mise"], "", 1);
+        let cfg = config_with_brew_and_mise(&[], &["node@lts"]);
+        let rows = run(&shell, &cfg, &args(vec![], false), &Os::Mac)
+            .await
+            .unwrap();
+        let mise_row = rows.iter().find(|r| r.category == "mise").unwrap();
+        assert_eq!(mise_row.status, Status::Failed);
+        assert!(mise_row.note.contains("mise activate"));
+    }
+
+    #[tokio::test]
+    async fn dry_run_includes_mise_rows() {
+        let shell = FakeShell::new();
+        let cfg = config_with_brew_and_mise(&["gh"], &["node@lts", "rust@latest"]);
+        let rows = run(&shell, &cfg, &args(vec![], true), &Os::Mac)
+            .await
+            .unwrap();
+        let mise_count = rows.iter().filter(|r| r.category == "mise").count();
+        assert_eq!(mise_count, 2);
+        assert!(shell.calls().is_empty());
     }
 
     #[tokio::test]
