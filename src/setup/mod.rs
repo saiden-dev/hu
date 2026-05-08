@@ -7,7 +7,9 @@
 
 mod cli;
 mod config;
+mod display;
 mod os;
+mod status;
 mod types;
 
 pub use cli::SetupCommand;
@@ -16,13 +18,14 @@ use anyhow::{bail, Context, Result};
 use owo_colors::OwoColorize;
 
 use cli::ConfigCommand;
+use os::Os;
+
+use crate::util::shell::RealShell;
 
 /// Dispatch entry point — called from `main.rs`.
 pub async fn run_command(cmd: SetupCommand) -> Result<()> {
     match cmd {
-        SetupCommand::Status | SetupCommand::Preview => {
-            bail!("hu setup status: not yet implemented (Phase 0 chunk 0.4)");
-        }
+        SetupCommand::Status | SetupCommand::Preview => run_status().await,
         SetupCommand::Run(_) => {
             bail!("hu setup run: not yet implemented (Phase 5)");
         }
@@ -65,6 +68,17 @@ fn init_config() -> Result<()> {
             outcome.path.display()
         );
     }
+    Ok(())
+}
+
+async fn run_status() -> Result<()> {
+    let os = Os::detect()?;
+    let cfg = config::load().context("load setup.toml")?;
+    let shell = RealShell;
+    let rows = status::collect(&shell, &cfg).await?;
+    println!("{} host: {}", "◆".cyan(), os.label());
+    println!("{}", display::render(&rows));
+    println!("{}", display::summary(&rows));
     Ok(())
 }
 
