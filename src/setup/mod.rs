@@ -5,6 +5,7 @@
 //!
 //! Each step follows the idempotency contract `check → skip-or-act → re-verify`.
 
+mod bootstrap;
 mod cli;
 mod config;
 mod display;
