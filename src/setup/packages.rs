@@ -98,6 +98,12 @@ pub trait Installer: Send + Sync {
     }
 }
 
+/// Split a `lang@version` package id into `(lang, version)`. Defaults to
+/// `latest` when no `@` is present.
+pub fn split_lang_version(pkg: &str) -> (&str, &str) {
+    pkg.split_once('@').unwrap_or((pkg, "latest"))
+}
+
 /// Homebrew installer. Works on macOS and Linux (linuxbrew).
 pub struct BrewInstaller;
 
@@ -132,6 +138,49 @@ impl Installer for BrewInstaller {
     }
 }
 
+/// `mise` polyglot version manager. Manages node, ruby, python, rust, etc.
+/// from a single tool — second concrete `Installer` impl that validates the
+/// trait abstraction (per doctrine §1: trait earned when ≥2 implementers).
+pub struct MiseInstaller;
+
+#[async_trait]
+impl Installer for MiseInstaller {
+    fn name(&self) -> &'static str {
+        "mise"
+    }
+
+    /// Check via `mise current <lang>`. Exit 0 + non-empty output means an
+    /// active version is set. We don't pin a specific version equality —
+    /// "any version of node managed by mise" satisfies a `node@lts` request,
+    /// because mise upgrades happen separately via `mise upgrade`.
+    async fn check<S: Shell + ?Sized>(&self, shell: &S, package: &str) -> Result<bool> {
+        let (lang, _version) = split_lang_version(package);
+        let out = shell
+            .run("mise", &["current", lang])
+            .await
+            .with_context(|| format!("mise current {}", lang))?;
+        Ok(out.is_success() && !out.stdout.trim().is_empty())
+    }
+
+    /// Install via `mise use -g <pkg@version>`. Mise is idempotent itself,
+    /// but we still funnel through `ensure()` for the re-verify contract.
+    async fn install<S: Shell + ?Sized>(&self, shell: &S, package: &str) -> Result<()> {
+        let out = shell
+            .run("mise", &["use", "-g", package])
+            .await
+            .with_context(|| format!("mise use -g {}", package))?;
+        if !out.is_success() {
+            anyhow::bail!(
+                "mise use -g {} failed (exit {:?}): {}",
+                package,
+                out.status.code(),
+                out.stderr.trim()
+            );
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,6 +188,10 @@ mod tests {
 
     fn brew() -> BrewInstaller {
         BrewInstaller
+    }
+
+    fn mise() -> MiseInstaller {
+        MiseInstaller
     }
 
     #[tokio::test]
@@ -234,5 +287,84 @@ mod tests {
             InstallResult::skipped("x", "filtered").status,
             Status::Skipped
         );
+    }
+
+    #[test]
+    fn split_lang_version_handles_versioned() {
+        assert_eq!(split_lang_version("node@lts"), ("node", "lts"));
+        assert_eq!(split_lang_version("rust@1.80"), ("rust", "1.80"));
+        assert_eq!(split_lang_version("python@latest"), ("python", "latest"));
+    }
+
+    #[test]
+    fn split_lang_version_defaults_when_no_at() {
+        assert_eq!(split_lang_version("node"), ("node", "latest"));
+        assert_eq!(split_lang_version("ruby"), ("ruby", "latest"));
+    }
+
+    #[tokio::test]
+    async fn mise_name_is_mise() {
+        assert_eq!(mise().name(), "mise");
+    }
+
+    #[tokio::test]
+    async fn mise_check_returns_true_on_active_version() {
+        let shell = FakeShell::new();
+        shell.expect("mise", &["current", "node"], "20.10.0\n", 0);
+        assert!(mise().check(&shell, "node@lts").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn mise_check_returns_false_on_empty_stdout() {
+        // `mise current` can exit 0 with empty stdout when nothing is set
+        let shell = FakeShell::new();
+        shell.expect("mise", &["current", "ruby"], "", 0);
+        assert!(!mise().check(&shell, "ruby@latest").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn mise_check_returns_false_on_nonzero_exit() {
+        let shell = FakeShell::new();
+        shell.expect("mise", &["current", "rust"], "", 1);
+        assert!(!mise().check(&shell, "rust@latest").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn mise_install_runs_use_global() {
+        let shell = FakeShell::new();
+        shell.expect(
+            "mise",
+            &["use", "-g", "node@lts"],
+            "installed node@20.10\n",
+            0,
+        );
+        mise().install(&shell, "node@lts").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn mise_install_errors_on_nonzero_exit() {
+        let shell = FakeShell::new();
+        shell.expect("mise", &["use", "-g", "rust@nightly"], "", 1);
+        let err = mise().install(&shell, "rust@nightly").await.unwrap_err();
+        assert!(err.to_string().contains("mise use -g rust@nightly failed"));
+    }
+
+    #[tokio::test]
+    async fn mise_ensure_skips_when_already_present() {
+        let shell = FakeShell::new();
+        shell.expect("mise", &["current", "node"], "20.10.0\n", 0);
+        let r = mise().ensure(&shell, "node@lts").await;
+        assert_eq!(r.status, Status::Already);
+        assert_eq!(shell.calls().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn mise_ensure_installs_when_missing_re_verifies_green() {
+        let shell = FakeShell::new();
+        shell.expect_sequence("mise", &["current", "rust"], &[("", 1), ("1.80.0\n", 0)]);
+        shell.expect("mise", &["use", "-g", "rust@latest"], "installed\n", 0);
+        let r = mise().ensure(&shell, "rust@latest").await;
+        assert_eq!(r.status, Status::Installed);
+        assert_eq!(shell.calls().len(), 3);
     }
 }
